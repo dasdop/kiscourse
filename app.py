@@ -10,10 +10,10 @@ from datetime import datetime
 # 🚨 시트 ID 재확인 (여기가 틀리면 과목이 섞입니다)
 # ==========================================
 # 11학년(현재 10학년용) 과목 리스트 시트 ID
-ID_11 = "1Yp79f79ilwA2ErJ6DoxRPbU_ADCq0PnRGH2TxGvKSDg" 
+ID_11 = "1xADYmy5iJEIiaENxCH1ZiqGU2yiFS81MfSQDCMsnO04" 
 
 # 12학년(현재 11학년용) 과목 리스트 시트 ID
-ID_12 = "1xADYmy5iJEIiaENxCH1ZiqGU2yiFS81MfSQDCMsnO04" 
+ID_12 = "1Yp79f79ilwA2ErJ6DoxRPbU_ADCq0PnRGH2TxGvKSDg" 
 
 # ------------------------------------------
 # 학번 앞자리(10..., 11...)에 따라 과목을 나누는 로직 재점검
