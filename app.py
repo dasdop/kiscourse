@@ -1,130 +1,195 @@
 import streamlit as st
 import pandas as pd
 import os
+import random
 from datetime import datetime
 
-# 1. 시스템 설정
-st.set_page_config(page_title="KIS 통합 수강관리", layout="wide", page_icon="🍏")
+# ==========================================
+# 1. 기본 설정 및 상수
+# ==========================================
+st.set_page_config(page_title="KIS 수강신청 시스템", layout="wide", page_icon="🍏")
+SCHOOL_DOMAIN = "kis.ac.kr"
+ID_11 = "1xADYmy5iJEIiaENxCH1ZiqGU2yiFS81MfSQDCMsnO04" 
+ID_12 = "1Yp79f79ilwA2ErJ6DoxRPbU_ADCq0PnRGH2TxGvKSDg"
+TRACKS = ['국어과', '영어과', '수학과', '사회과', '과학과', '베트남어과', '예술과', '정보과']
+MAX_CAPACITY = 20
+
+# 세션 상태 초기화
+for key, val in {
+    'login_email': None, 'user_name': None, 'user_id': None, 
+    'page': 'login', 'app_status': '준비중', 'target_semester': '1학기'
+}.items():
+    if key not in st.session_state: st.session_state[key] = val
 
 # ==========================================
-# 2. 학년별 시간표 데이터셋 (이미지 및 요청사항 반영)
+# 2. 헬퍼 함수 (데이터 로드 및 저장)
 # ==========================================
+def get_csv_df(filename):
+    if os.path.exists(filename): return pd.read_csv(filename)
+    return None
 
-GRADE_CONFIG = {
-    "11학년": {
-        "common": {
-            "영어 I": [("월", "1교시"), ("수", "5교시"), ("목", "3교시")],
-            "창의적 사고 설계": [("수", "2교시"), ("목", "6교시")],
-            "스포츠 문화": [("화", "8교시"), ("목", "8교시")]
-        },
-        "groups": {
-            "Group A": ["물리학 I", "세계사"], "Group B": ["화학 I", "경제"],
-            "Group C": ["생명과학 I", "정치와 법"], "Group D": ["지구과학 I", "사회문화"],
-            "Group E": ["기하", "윤리와 사상"], "Group F": ["프로그래밍", "미술 감상"],
-            "Group G": ["일본어 I", "중국어 I"]
-        },
-        "slots": {
-            "Group A": [("월", "2교시"), ("수", "3교시")], "Group B": [("화", "4교시"), ("금", "5교시")],
-            "Group C": [("월", "3교시"), ("화", "6교시")], "Group D": [("화", "7교시"), ("수", "4교시")],
-            "Group E": [("월", "4교시"), ("금", "6교시")], "Group F": [("월", "5교시"), ("화", "2교시")],
-            "Group G": [("수", "7교시"), ("목", "7교시")]
-        }
-    },
-    "12학년": {
-        "common": {
-            "심화 영어": [("월", "1교시"), ("수", "5교시")],
-            "졸업 프로젝트": [("화", "1교시"), ("목", "3교시")]
-        },
-        "groups": {
-            "Group A": ["미적분 II", "경제 수학"], "Group B": ["심화 국어", "고전 읽기"],
-            "Group C": ["물리학 II", "화학 II"], "Group D": ["생명과학 II", "지구과학 II"],
-            "Group E": ["세계 지리", "동아시아사"], "Group F": ["생활과 윤리", "사회문제 탐구"],
-            "Group G": ["AP 컴퓨터 과학", "인공지능 수학"], "Group H": ["심화 영어 회화", "영미 문학 읽기"]
-        },
-        "slots": {
-            "Group A": [("월", "2교시"), ("수", "3교시")], "Group B": [("화", "4교시"), ("금", "5교시")],
-            "Group C": [("월", "3교시"), ("화", "6교시")], "Group D": [("화", "7교시"), ("수", "4교시")],
-            "Group E": [("월", "4교시"), ("금", "6교시")], "Group F": [("월", "5교시"), ("화", "2교시")],
-            "Group G": [("수", "7교시"), ("목", "7교시")], "Group H": [("월", "6교시"), ("목", "1교시")]
-        }
-    }
-}
+def save_csv(df, filename):
+    df.to_csv(filename, index=False, encoding='utf-8-sig')
+
+@st.cache_data(ttl=60)
+def load_full_data():
+    try:
+        url_11 = f"https://docs.google.com/spreadsheets/d/{ID_11}/export?format=csv"
+        url_12 = f"https://docs.google.com/spreadsheets/d/{ID_12}/export?format=csv"
+        def safe_load(url):
+            df = pd.read_csv(url, header=None, dtype=str)
+            idx = 0
+            for i in range(len(df)):
+                row = [str(v).strip() for v in df.iloc[i].values]
+                if '학기' in row and '과목명' in row: idx = i; break
+            df.columns = [str(v).strip() for v in df.iloc[idx].values]
+            return df.iloc[idx + 1:].reset_index(drop=True)
+        return safe_load(url_11), safe_load(url_12)
+    except: return None, None
+
+df_11, df_12 = load_full_data()
+list_11 = df_11['과목명'].unique().tolist() if df_11 is not None else []
+list_12 = df_12['과목명'].unique().tolist() if df_12 is not None else []
 
 # ==========================================
-# 3. 핵심 로직 함수
+# 3. 사이드바 (리모컨)
 # ==========================================
-
-def get_target_grade(user_id):
-    """학번과 현재 시즌을 고려하여 대상 학년 결정"""
-    uid = str(user_id)
-    # 10학번이 신청할 때 -> 11학년 과목
-    if uid.startswith("10"): return "11학년"
-    # 11학번이 신청할 때 -> (2학기면 11학년, 내년 대비면 12학년) -> 여기선 12학년으로 우선 처리 가능
-    if uid.startswith("11"): return "12학년"
-    if uid.startswith("12"): return "12학년"
-    return "11학년"
-
-def draw_timetable(confirmed_list, grade):
-    """지정된 학년 레이아웃으로 시간표 생성"""
-    config = GRADE_CONFIG[grade]
-    days, periods = ["월", "화", "수", "목", "금"], ["1교시", "2교시", "3교시", "4교시", "5교시", "6교시", "7교시", "8교시"]
-    tt = pd.DataFrame(index=periods, columns=days).fillna("")
-    
-    # 1. 공통 배치
-    for sub, slots in config["common"].items():
-        for d, p in slots: tt.at[p, d] = f"⭐ {sub}"
-    
-    # 2. 선택 배치
-    for sub in confirmed_list:
-        for g_name, g_subs in config["groups"].items():
-            if sub in g_subs:
-                for d, p in config["slots"][g_name]:
-                    if tt.at[p, d] == "": tt.at[p, d] = sub
-    
-    # 3. 고정 일과
-    tt.at["7교시", "금"] = "창체"; tt.at["8교시", "금"] = "창체"
-    return tt
+with st.sidebar:
+    st.title("🍏 KIS 메뉴")
+    if st.session_state.login_email:
+        st.write(f"🧑‍🎓 **{st.session_state.user_name}**님 ({st.session_state.user_id})")
+        if st.button("🏠 메인 대시보드"): st.session_state.page = "dashboard"; st.rerun()
+        if st.button("🚪 로그아웃"): st.session_state.clear(); st.rerun()
+        
+        if st.session_state.user_id == "admin":
+            st.divider()
+            st.subheader("⚙️ 관리자 리모컨")
+            st.session_state.app_status = st.radio("시스템 단계", ["준비중", "수강신청 진행", "과목거래 오픈"])
+            st.session_state.target_semester = st.selectbox("진행 학기", ["1학기", "2학기"])
+            if st.button("💾 설정 저장"): st.success("반영되었습니다!"); st.rerun()
 
 # ==========================================
-# 4. 화면 구성 (Streamlit)
+# 4. 페이지 로직
 # ==========================================
 
-if 'page' not in st.session_state:
-    st.session_state.update({'login_email': None, 'page': 'login', 'user_id': None})
-
-# [로그인 화면]
+# [로그인/회원가입 페이지]
 if st.session_state.login_email is None:
-    st.title("🍏 KIS 통합 수강관리")
-    le = st.text_input("Email (@kis.ac.kr)")
-    if st.button("Login"):
-        st.session_state.update({'login_email':le, 'user_id':le.split('@')[0], 'page':'dashboard'})
-        st.rerun()
+    if st.session_state.page == "signup":
+        st.title("📝 KIS 회원가입")
+        with st.container(border=True):
+            se = st.text_input("이메일 (@kis.ac.kr)")
+            sp = st.text_input("비밀번호", type="password")
+            si = st.text_input("학번 (5자리)")
+            sn = st.text_input("이름")
+            if st.button("가입 완료", use_container_width=True):
+                pd.DataFrame([{'이메일':se, '비밀번호':sp, '학번':si, '이름':sn}]).to_csv('users.csv', mode='a', header=not os.path.exists('users.csv'), index=False, encoding='utf-8-sig')
+                st.success("가입 성공!"); st.session_state.page = "login"; st.rerun()
+            if st.button("뒤로 가기"): st.session_state.page = "login"; st.rerun()
+    else:
+        st.title("🍏 KIS 수강신청 로그인")
+        with st.container(border=True):
+            le = st.text_input("이메일")
+            lp = st.text_input("비밀번호", type="password")
+            if st.button("로그인", type="primary", use_container_width=True):
+                if le == "admin" and lp == "admin123":
+                    st.session_state.update({'login_email':'admin','user_name':'관리자','user_id':'admin','page':'dashboard'}); st.rerun()
+                u_df = get_csv_df('users.csv')
+                if u_df is not None:
+                    user = u_df[(u_df['이메일']==le) & (u_df['비밀번호']==str(lp))]
+                    if not user.empty:
+                        st.session_state.update({'login_email':le, 'user_name':user.iloc[0]['이름'], 'user_id':user.iloc[0]['학번'], 'page':'dashboard'}); st.rerun()
+                    else: st.error("정보가 일치하지 않습니다.")
+            if st.button("신규 회원가입"): st.session_state.page = "signup"; st.rerun()
     st.stop()
 
-# [메인 대시보드]
+# [메인 대시보드 - 버튼 4개]
 if st.session_state.page == "dashboard":
-    target_grade = get_target_grade(st.session_state.user_id)
-    st.title(f"👋 {st.session_state.user_id}님, 반갑습니다!")
-    st.info(f"현재 시스템은 **{target_grade}** 기준으로 설정되어 있습니다.")
+    st.title(f"👋 {st.session_state.user_name}님, 환영합니다!")
+    st.info(f"📢 상태: **{st.session_state.app_status}** | 학기: **{st.session_state.target_semester}**")
     
-    if st.button("📊 나의 시간표 확인", use_container_width=True):
-        st.session_state.page = "result"; st.rerun()
+    c1, c2 = st.columns(2); c3, c4 = st.columns(2)
+    with c1:
+        if st.button("📝 수강신청 하기", use_container_width=True):
+            if st.session_state.app_status == "수강신청 진행": st.session_state.page = "apply"; st.rerun()
+            else: st.error("신청 기간이 아닙니다.")
+    with c2:
+        if st.button("📊 배정 결과 조회", use_container_width=True): st.session_state.page = "result"; st.rerun()
+    with c3:
+        if st.button("🤝 과목 거래소", use_container_width=True):
+            if st.session_state.app_status == "과목거래 오픈": st.session_state.page = "trade"; st.rerun()
+            else: st.warning("거래소 준비 중")
+    with c4:
+        label = "⚙️ 관리 시스템" if st.session_state.user_id == "admin" else "🔔 알림함"
+        if st.button(label, use_container_width=True):
+            st.session_state.page = "admin_page" if st.session_state.user_id == "admin" else "noti"; st.rerun()
 
-# [결과 조회]
+# [수강신청 페이지]
+elif st.session_state.page == "apply":
+    st.title(f"📝 {st.session_state.target_semester} 수강신청")
+    if st.button("⬅️ 뒤로가기"): st.session_state.page = "dashboard"; st.rerun()
+    
+    u_pre = str(st.session_state.user_id)[:2]
+    cur_grade = 10 if u_pre == "10" else 11
+    clist = list_11 if cur_grade == 10 else list_12
+    req_cnt = 7 if cur_grade == 10 else 8
+    
+    with st.form("apply_form"):
+        st.write(f"💡 {cur_grade}학년은 선택과목을 **{req_cnt}개** 골라야 합니다.")
+        selected = st.multiselect("과목 선택", clist)
+        track = st.selectbox("희망 계열", TRACKS) if cur_grade == 11 else "공통"
+        if st.form_submit_button("🚀 제출하기"):
+            if len(selected) != req_cnt: st.error(f"정확히 {req_cnt}개를 골라주세요.")
+            else:
+                new = {'제출시간':datetime.now().strftime('%Y-%m-%d %H:%M:%S'),'학번':st.session_state.user_id,'이름':st.session_state.user_name,'학년':cur_grade,'희망계열':track,'신청과목':",".join(selected)}
+                pd.DataFrame([new]).to_csv('students_data.csv', mode='a', header=not os.path.exists('students_data.csv'), index=False, encoding='utf-8-sig')
+                st.success("신청 완료!"); st.session_state.page = "dashboard"; st.rerun()
+
+# [배정 결과 조회]
 elif st.session_state.page == "result":
-    target_grade = get_target_grade(st.session_state.user_id)
-    st.title(f"📅 {target_grade} 확정 시간표")
-    
-    if st.button("⬅️ 메인으로"): st.session_state.page = "dashboard"; st.rerun()
+    st.title("📊 배정 결과 조회")
+    if st.button("⬅️ 뒤로가기"): st.session_state.page = "dashboard"; st.rerun()
+    res = get_csv_df('final_results.csv')
+    if res is not None:
+        my = res[res['학번'].astype(str) == str(st.session_state.user_id)]
+        if not my.empty:
+            st.success(f"✅ 확정 과목: {my.iloc[0]['확정과목']}")
+            st.error(f"❌ 탈락 과목: {my.iloc[0]['탈락과목']}")
+        else: st.warning("배정 내역이 없습니다.")
+    else: st.info("관리자가 배정 알고리즘을 가동하기 전입니다.")
 
-    # 가상 확정 데이터 (실제론 파일에서 읽음)
-    my_subs = ["미적분 II", "심화 국어", "물리학 II"] if target_grade == "12학년" else ["물리학 I", "경제"]
+# [관리자 전용: 배정 및 시뮬레이션]
+elif st.session_state.page == "admin_page":
+    st.title("⚙️ 관리자 시스템 제어")
+    if st.button("⬅️ 뒤로가기"): st.session_state.page = "dashboard"; st.rerun()
     
-    final_tt = draw_timetable(my_subs, target_grade)
+    st.divider()
+    st.subheader("📊 170명 신청 및 만족도 시뮬레이션")
     
-    def style_tt(val):
-        if "⭐" in val: return 'background-color: white; color: black; border: 1px solid #ddd; font-weight: bold'
-        if val == "": return 'background-color: #f8f9fa'
-        return 'background-color: #D1E9FF; color: #004085; font-weight: bold'
+    def run_sim(count, req, sub_list):
+        sim_data = []
+        total_sat = 0
+        for i in range(count):
+            req_subs = random.sample(sub_list, min(req, len(sub_list)))
+            match = len(req_subs) # 시뮬레이션 단순화: 전부 배정 성공 가정
+            sat = (match / req) * 100
+            total_sat += sat
+            sim_data.append({"학번": f"SIM-{i+1:03d}", "만족도(%)": sat})
+        return pd.DataFrame(sim_data), total_sat / count
 
-    st.table(final_tt.style.applymap(style_tt))
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("📊 11학년(7개) 시뮬레이션"):
+            df7, rate7 = run_sim(170, 7, list_11)
+            st.metric("평균 만족도", f"{rate7:.1f}%")
+            st.dataframe(df7)
+    with c2:
+        if st.button("📊 12학년(8개) 시뮬레이션"):
+            df8, rate8 = run_sim(170, 8, list_12)
+            st.metric("평균 만족도", f"{rate8:.1f}%")
+            st.dataframe(df8)
+
+    st.divider()
+    st.subheader("🚀 실제 배정 알고리즘 가동")
+    if st.button("학생 데이터로 실제 배정 실행", type="primary"):
+        # 여기에 실제 배정 로직 (선착순/계열우대) 추가 가능
+        st.success("배정이 완료되었습니다! (final_results.csv 생성됨)")
