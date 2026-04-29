@@ -6,8 +6,8 @@ from datetime import datetime
 # ==========================================
 # 🚨 기본 설정 (시트 ID 변경 필수)
 # ==========================================
-ID_11 = "11학년_시트_ID" 
-ID_12 = "12학년_시트_ID" 
+ID_11 = "1Nfzop5JjziphJON7BGofEMJDM8TV31uY" 
+ID_12 = "1NwYlD2X396Ux4NkRT_Dru3zsuolYeJrz" 
 SCHOOL_DOMAIN = "kshcm.net"  
 MAX_CAPACITY = 35  
 MIN_CAPACITY = 20  
