@@ -4,30 +4,28 @@ import os
 from datetime import datetime
 
 # ==========================================
-# 🚨 설정 및 ID (본인의 시트 ID로 교체 필수)
+# 🚨 설정 및 ID (본인의 시트 ID로 교체)
 # ==========================================
 ID_11 = "1Nfzop5JjziphJON7BGofEMJDM8TV31uY" 
 ID_12 = "1NwYlD2X396Ux4NkRT_Dru3zsuolYeJrz" 
-MAX_CAPACITY = 35  # 과목별 최대 정원
-MIN_CAPACITY = 20  # 폐강 기준 최소 인원
+SCHOOL_DOMAIN = "kshcm.net"  # HCM 학교 도메인
+MAX_CAPACITY = 35  
+MIN_CAPACITY = 20  
 
 st.set_page_config(page_title="KIS 수강신청 시스템", layout="wide", page_icon="🍏")
 
 # --- 세션 상태 초기화 ---
+if 'login_email' not in st.session_state: st.session_state.login_email = None
 if 'page' not in st.session_state: st.session_state.page = "input"
 if 'admin' not in st.session_state: st.session_state.admin = False
-if 'closed_list' not in st.session_state: st.session_state.closed_list = []
 
-# CSS: 디자인 깔끔하게 정리
-st.markdown("""
-    <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    .stButton>button {width: 100%; border-radius: 5px;}
-    </style>
-""", unsafe_allow_html=True)
+# 이름 마스킹 함수 (예: 홍길동 -> 홍O동)
+def mask_name(name):
+    name = str(name)
+    if len(name) <= 2: return name[0] + "O"
+    else: return name[0] + "O" * (len(name) - 2) + name[-1]
 
-# 데이터 로드 함수
+# 데이터 로드
 @st.cache_data(ttl=60)
 def load_course_data():
     try:
@@ -35,175 +33,130 @@ def load_course_data():
         url_12 = f"https://docs.google.com/spreadsheets/d/{ID_12}/export?format=csv"
         df_11 = pd.read_csv(url_11); df_12 = pd.read_csv(url_12)
         return df_11.iloc[:, 0].dropna().tolist(), df_12.iloc[:, 0].dropna().tolist()
-    except: return ["과목A", "과목B", "과목C"], ["과목X", "과목Y", "과목Z"]
+    except: return ["과목A", "과목B"], ["과목X", "과목Y"]
 
 list_11, list_12 = load_course_data()
 
-# 학번 검증 함수 (11학년: 11XXX, 12학년: 12XXX)
-def is_valid_sid(sid, grade):
-    if not sid.isdigit() or len(sid) != 5: return False
-    st_list = [int(d) for d in sid]
-    if st_list[0] != 1: return False
-    if grade == 11 and st_list[1] != 1: return False
-    if grade == 12 and st_list[1] != 2: return False
-    if st_list[2] not in [1,2,3,4,5]: return False
-    last_two = int(sid[3:])
-    if st_list[3] < 3: return last_two > 0
-    elif st_list[3] == 3: return st_list[4] <= 5
-    return False
+# ==========================================
+# 🔑 1단계: 학교 계정 로그인 화면
+# ==========================================
+if st.session_state.login_email is None:
+    st.title("🍏 KIS 수강신청 로그인")
+    with st.container(border=True):
+        st.subheader("학교 계정으로 로그인하세요")
+        st.caption(f"이 시스템은 @{SCHOOL_DOMAIN} 계정 전용입니다.")
+        email_input = st.text_input("이메일 주소 입력", placeholder=f"yourname@{SCHOOL_DOMAIN}")
+        
+        if st.button("로그인", type="primary"):
+            if email_input.endswith(f"@{SCHOOL_DOMAIN}"):
+                st.session_state.login_email = email_input
+                st.success("로그인 성공!")
+                st.rerun()
+            else:
+                st.error(f"❌ 학교 공식 이메일(@{SCHOOL_DOMAIN})만 사용 가능합니다.")
+    st.stop()
 
 # ==========================================
-# ⚙️ 관리자 알고리즘 함수
+# ⚙️ 데이터베이스 처리 (배정 및 로그)
 # ==========================================
-def run_initial_assignment(students_df, all_courses):
-    students_df['제출시간'] = pd.to_datetime(students_df['제출시간'])
-    students_df = students_df.sort_values('제출시간')
-    capacities = {course: MAX_CAPACITY for course in all_courses}
-    assignments = {}
+# 배정 결과 파일 로드 함수
+def get_final_df():
+    if os.path.exists('final_results.csv'):
+        return pd.read_csv('final_results.csv')
+    return None
 
-    for p in ['1지망', '2지망', '3지망']:
-        for _, student in students_df.iterrows():
-            sid = str(student['학번'])
-            if sid in assignments: continue
-            choice = student[p]
-            if choice in capacities and capacities[choice] > 0:
-                capacities[choice] -= 1
-                assignments[sid] = choice
-    
-    results = []
-    for _, student in students_df.iterrows():
-        sid = str(student['학번'])
-        course = assignments.get(sid, "미배정")
-        results.append({**student.to_dict(), '배정과목': course})
-    
-    pd.DataFrame(results).to_csv('final_results.csv', index=False, encoding='utf-8-sig')
+# 교환 요청(알림) 저장 함수
+def send_trade_request(sender_id, sender_name, target_id, target_course, my_course):
+    req_df = pd.DataFrame([{
+        '시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        '보낸사람ID': sender_id,
+        '보낸사람이름': sender_name,
+        '받는사람ID': target_id,
+        '상대과목': target_course,
+        '내과목': my_course,
+        '상태': '대기중'
+    }])
+    req_df.to_csv('trade_requests.csv', mode='a', header=not os.path.exists('trade_requests.csv'), index=False, encoding='utf-8-sig')
 
 # ==========================================
 # 📱 메인 화면 로직
 # ==========================================
 
-# [1단계: 수강신청 입력]
-if st.session_state.page == "input":
-    st.title("🍏 KIS 수강신청 시스템")
-    with st.container(border=True):
-        st.subheader("📝 신청서 작성 (선착순)")
-        c1, c2 = st.columns(2)
-        with c1:
-            s_id = st.text_input("학번 (5자리)", placeholder="예: 11101")
-            s_name = st.text_input("이름")
-        with c2:
-            grade = st.radio("학년", [11, 12], horizontal=True)
-        
-        st.divider()
-        clist = list_11 if grade == 11 else list_12
-        sel1 = st.selectbox("1지망", clist, key="c1")
-        sel2 = st.selectbox("2지망", clist, key="c2")
-        sel3 = st.selectbox("3지망", clist, key="c3")
-        
-        if st.button("🚀 신청서 최종 제출", type="primary"):
-            if not is_valid_sid(s_id, grade):
-                st.error("❌ 학번 형식이 올바르지 않습니다.")
-            elif not s_name:
-                st.error("❌ 이름을 입력해주세요.")
-            else:
-                if os.path.exists('students_data.csv'):
-                    exist = pd.read_csv('students_data.csv')
-                    if str(s_id) in exist['학번'].astype(str).values:
-                        st.error("🚨 이미 신청된 학번입니다.")
-                        st.stop()
-                
-                ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                pd.DataFrame([{'제출시간': ts, '학번': s_id, '이름': s_name, '학년': grade, '1지망': sel1, '2지망': sel2, '3지망': sel3}]).to_csv('students_data.csv', mode='a', header=not os.path.exists('students_data.csv'), index=False, encoding='utf-8-sig')
-                st.session_state.page = "success"; st.rerun()
+# 사이드바: 내 정보 및 알림함 가기
+with st.sidebar:
+    st.write(f"📧 **{st.session_state.login_email}**")
+    if st.button("🏠 수강신청/결과조회"): st.session_state.page = "check"; st.rerun()
+    if st.button("🔔 알림함 (교환요청)"): st.session_state.page = "inbox"; st.rerun()
+    if st.button("로그아웃"): st.session_state.login_email = None; st.rerun()
 
-# [2, 3, 4단계 통합: 결과 확인 / 재배정 / 교환]
-elif st.session_state.page in ["success", "check"]:
-    if st.session_state.page == "success": st.balloons()
-    st.title("🔍 배정 결과 및 사후 관리")
+# [페이지: 알림함]
+if st.session_state.page == "inbox":
+    st.title("🔔 나의 알림함")
+    st.info("다른 학생으로부터 온 과목 교환 요청을 확인하고 승인할 수 있습니다.")
     
-    with st.sidebar:
-        check_id = st.text_input("본인 학번 인증")
-        st.button("새로고침")
-        if st.button("🏠 홈으로"): st.session_state.page = "input"; st.rerun()
-
-    if os.path.exists('final_results.csv'):
+    if os.path.exists('trade_requests.csv') and os.path.exists('final_results.csv'):
         df = pd.read_csv('final_results.csv')
-        user = df[df['학번'].astype(str) == str(check_id)]
+        reqs = pd.read_csv('trade_requests.csv')
+        my_id = df[df['이메일'] == st.session_state.login_email]['학번'].values[0]
         
-        if not user.empty:
-            curr = user.iloc[0]['배정과목']
-            st.success(f"### 현재 배정 상태: **[{curr}]**")
-            
-            # --- 미배정자 또는 폐강자 재선택 로직 ---
-            if curr == "미배정" or "폐강" in str(curr):
-                st.warning("⚠️ 과목 재선택이 필요합니다. 잔여석이 있는 과목을 고르세요.")
-                counts = df['배정과목'].value_counts()
-                g_list = list_11 if user.iloc[0]['학년'] == 11 else list_12
-                remains = [c for c in g_list if counts.get(c, 0) < MAX_CAPACITY and "폐강" not in str(c)]
-                
-                selected_new = st.selectbox("선택 가능 과목", remains)
-                if st.button("과목 확정하기"):
-                    df.loc[df['학번'].astype(str) == str(check_id), '배정과목'] = selected_new
-                    df.to_csv('final_results.csv', index=False, encoding='utf-8-sig')
-                    st.success("배정이 완료되었습니다!"); st.rerun()
-            
-            # --- 1:1 교환 시스템 ---
-            else:
-                st.divider()
-                st.subheader("🤝 1:1 과목 교환")
-                st.info("교환을 원하는 상대방과 합의 후 상대방의 학번을 입력하세요.")
-                target_id = st.text_input("상대방 학번 입력")
-                if st.button("교환 승인"):
-                    target_user = df[df['학번'].astype(str) == str(target_id)]
-                    if not target_user.empty:
-                        your_course = target_user.iloc[0]['배정과목']
-                        # 교환 실행
-                        df.loc[df['학번'].astype(str) == str(check_id), '배정과목'] = your_course
-                        df.loc[df['학번'].astype(str) == str(target_id), '배정과목'] = curr
-                        df.to_csv('final_results.csv', index=False, encoding='utf-8-sig')
-                        st.success(f"✅ 교환 성공! [{your_course}] 과목으로 변경되었습니다."); st.rerun()
-                    else: st.error("상대방 학번을 찾을 수 없습니다.")
-        else:
-            if check_id: st.error("신청 내역이 없거나 아직 배정 전입니다.")
-    else:
-        st.info("관리자가 배정을 진행 중입니다. 잠시 후 확인해주세요.")
+        my_reqs = reqs[(reqs['받는사람ID'].astype(str) == str(my_id)) & (reqs['상태'] == '대기중')]
+        
+        if not my_reqs.empty:
+            for idx, row in my_reqs.iterrows():
+                with st.expander(f"📩 {mask_name(row['보낸사람이름'])} 학생의 교환 요청"):
+                    st.write(f"**상대방의 과목:** {row['내과목']}")
+                    st.write(f"**나의 과목:** {row['상대과목']} (교환 대상)")
+                    
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if st.button("✅ 승인", key=f"acc_{idx}"):
+                            # 실제 데이터 교체 로직
+                            df.loc[df['학번'].astype(str) == str(row['보낸사람ID']), '배정과목'] = row['상대과목']
+                            df.loc[df['학번'].astype(str) == str(row['받는사람ID']), '배정과목'] = row['내과목']
+                            df.to_csv('final_results.csv', index=False, encoding='utf-8-sig')
+                            # 요청 상태 변경
+                            reqs.at[idx, '상태'] = '승인됨'
+                            reqs.to_csv('trade_requests.csv', index=False, encoding='utf-8-sig')
+                            st.success("교환이 완료되었습니다!"); st.rerun()
+                    with c2:
+                        if st.button("❌ 거절", key=f"rej_{idx}"):
+                            reqs.at[idx, '상태'] = '거절됨'
+                            reqs.to_csv('trade_requests.csv', index=False, encoding='utf-8-sig')
+                            st.rerun()
+        else: st.write("도착한 새 알림이 없습니다.")
+    else: st.write("교환 요청 기록이 없습니다.")
 
-# [관리자 모드]
-elif st.session_state.admin:
-    st.title("⚙️ 관리자 마스터 대시보드")
-    if st.button("로그아웃"): st.session_state.admin = False; st.rerun()
+# [페이지: 결과 조회 및 트레이드 리스트]
+elif st.session_state.page in ["check", "input"]:
+    st.title("📊 수강신청 현황 및 결과")
     
-    if os.path.exists('students_data.csv'):
-        s_data = pd.read_csv('students_data.csv')
-        st.metric("총 신청 인원", f"{len(s_data)}명")
-        
-        tab_a, tab_b = st.tabs(["📋 신청 명단", "⚡ 배정 및 폐강 제어"])
-        
-        with tab_a:
-            st.dataframe(s_data, use_container_width=True)
+    df = get_final_df()
+    if df is not None:
+        my_data = df[df['이메일'] == st.session_state.login_email]
+        if not my_data.empty:
+            my_id = my_data.iloc[0]['학번']; my_name = my_data.iloc[0]['이름']; my_course = my_data.iloc[0]['배정과목']
+            st.success(f"✅ **{my_name}**님은 현재 **[{my_course}]** 과목에 배정되어 있습니다.")
             
-        with tab_b:
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("1️⃣ 선착순 지망 배정 시작", type="primary"):
-                    run_initial_assignment(s_data, list_11 + list_12)
-                    st.success("1단계 배정 완료!")
-            with col2:
-                if st.button("2️⃣ 최종 폐강 확정 (20명 미만)", type="secondary"):
-                    if os.path.exists('final_results.csv'):
-                        res_df = pd.read_csv('final_results.csv')
-                        cnt = res_df['배정과목'].value_counts()
-                        closed = cnt[cnt < MIN_CAPACITY].index.tolist()
-                        res_df.loc[res_df['배정과목'].isin(closed), '배정과목'] = "폐강(재선택 필요)"
-                        res_df.to_csv('final_results.csv', index=False, encoding='utf-8-sig')
-                        st.warning(f"폐강 처리 완료: {closed}")
-                    else: st.error("배정 결과 파일이 없습니다.")
+            st.divider()
+            st.subheader("🤝 트레이드 리스트 (교환 신청)")
+            
+            # 검색 기능
+            search = st.text_input("과목명으로 검색", placeholder="과목명을 입력하세요")
+            display_df = df[df['배정과목'].str.contains(search)] if search else df
+            
+            # 리스트 출력
+            for idx, row in display_df.iterrows():
+                if str(row['학번']) == str(my_id): continue # 본인 제외
+                
+                c1, c2, c3, c4 = st.columns([1, 1, 2, 1])
+                with c1: st.write(f"학번: {row['학번']}")
+                with c2: st.write(f"이름: {mask_name(row['이름'])}")
+                with c3: st.write(f"배정과목: {row['배정과목']}")
+                with c4:
+                    if st.button("교환 요청", key=f"req_{row['학번']}"):
+                        send_trade_request(my_id, my_name, row['학번'], row['배정과목'], my_course)
+                        st.toast(f"{mask_name(row['이름'])} 학생에게 교환 요청을 보냈습니다!")
+        else:
+            st.warning("아직 배정된 데이터가 없습니다. (수강신청 기간이 아닙니다)")
     else:
-        st.info("아직 제출된 데이터가 없습니다.")
-
-# 관리자 로그인 (비밀번호: kis2026)
-if st.session_state.page == "input" and not st.session_state.admin:
-    with st.expander("Admin Login"):
-        pw = st.text_input("Password", type="password")
-        if st.button("Login"):
-            if pw == "kis2026": st.session_state.admin = True; st.rerun()
+        st.info("관리자가 배정 알고리즘을 가동하기 전입니다.")
