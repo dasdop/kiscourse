@@ -39,9 +39,19 @@ def load_full_data():
         url_11 = f"https://docs.google.com/spreadsheets/d/{ID_11}/export?format=csv"
         url_12 = f"https://docs.google.com/spreadsheets/d/{ID_12}/export?format=csv"
         
-        # 11학년 시트는 2번째 줄(index 1)이 진짜 헤더 / 12학년은 1번째 줄
+        # 1. 11학년 시트는 2번째 줄(header=1)이 제목이라고 가정하고 불러옴
         df_11 = pd.read_csv(url_11, header=1)
+        
+        # 2. 만약 11학년 시트의 1번째 줄(2022 개정...)을 삭제하셨을 경우를 대비해, '학기'가 없으면 첫 줄부터 다시 불러옴
+        if '학기' not in [str(c).strip() for c in df_11.columns]:
+            df_11 = pd.read_csv(url_11) # 기본값(header=0)으로 재시도
+            
         df_12 = pd.read_csv(url_12)
+        
+        # 3. 🚨 핵심 해결책: 모든 열 이름의 앞뒤 띄어쓰기(공백)를 강제로 싹 지워버림!
+        df_11.columns = df_11.columns.astype(str).str.strip()
+        df_12.columns = df_12.columns.astype(str).str.strip()
+        
         return df_11, df_12
     except Exception as e:
         st.error(f"🚨 시트 데이터를 불러오지 못했습니다: {e}")
