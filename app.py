@@ -317,12 +317,3 @@ elif st.session_state.page == "admin" and st.session_state.admin:
                 save_csv(status_df, 'course_status.csv')
                 
                 st.success(f"'{lowest_course}' 과목이 폐강되었습니다. 해당 과목 신청 학생들은 2차 보충 신청을 해야 합니다."); st.rerun()
-# === [임시] 데이터 초기화 버튼 ===
-st.divider()
-if st.button("🚨 꼬인 데이터 파일 자동 삭제하기"):
-    files_to_delete = ['students_data.csv', 'final_results.csv', 'course_status.csv']
-    for file in files_to_delete:
-        if os.path.exists(file):
-            os.remove(file)
-            st.write(f"🗑️ {file} 삭제 완료!")
-    st.success("✅ 초기화 완료! 이제 앱이 정상 작동할 것입니다. (이 임시 코드는 지우셔도 됩니다)")
