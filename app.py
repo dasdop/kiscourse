@@ -39,22 +39,31 @@ def load_full_data():
         url_11 = f"https://docs.google.com/spreadsheets/d/{ID_11}/export?format=csv"
         url_12 = f"https://docs.google.com/spreadsheets/d/{ID_12}/export?format=csv"
         
-        # 1. 11학년 시트는 2번째 줄(header=1)이 제목이라고 가정하고 불러옴
-        df_11 = pd.read_csv(url_11, header=1)
-        
-        # 2. 만약 11학년 시트의 1번째 줄(2022 개정...)을 삭제하셨을 경우를 대비해, '학기'가 없으면 첫 줄부터 다시 불러옴
-        if '학기' not in [str(c).strip() for c in df_11.columns]:
-            df_11 = pd.read_csv(url_11) # 기본값(header=0)으로 재시도
+        def smart_load(url):
+            # 일단 전체를 다 불러옵니다.
+            raw_df = pd.read_csv(url, header=None)
             
-        df_12 = pd.read_csv(url_12)
-        
-        # 3. 🚨 핵심 해결책: 모든 열 이름의 앞뒤 띄어쓰기(공백)를 강제로 싹 지워버림!
-        df_11.columns = df_11.columns.astype(str).str.strip()
-        df_12.columns = df_12.columns.astype(str).str.strip()
+            # 모든 행을 뒤져서 '학기'와 '과목명'이 들어있는 줄을 찾습니다.
+            header_idx = 0
+            for i, row in raw_df.iterrows():
+                row_str = row.astype(str).values
+                # 행 내용 중 '학기'와 '과목명'이 모두 포함된 줄을 찾으면 그게 제목줄입니다.
+                if any('학기' in s for s in row_str) and any('과목명' in s for s in row_str):
+                    header_idx = i
+                    break
+            
+            # 찾은 제목줄을 기준으로 데이터프레임을 다시 정립합니다.
+            df = pd.read_csv(url, header=header_idx)
+            # 열 이름 앞뒤 공백 제거
+            df.columns = df.columns.astype(str).str.strip()
+            return df
+
+        df_11 = smart_load(url_11)
+        df_12 = smart_load(url_12)
         
         return df_11, df_12
     except Exception as e:
-        st.error(f"🚨 시트 데이터를 불러오지 못했습니다: {e}")
+        st.error(f"🚨 시트 로딩 중 치명적 오류: {e}")
         return None, None
 
 def get_filtered_courses(semester):
@@ -62,22 +71,32 @@ def get_filtered_courses(semester):
     if df_11 is None or df_12 is None: return [], [], {}
     
     try:
-        # '학기' 열에서 선택된 학기(예: '1')가 포함된 행만 필터링
-        sem_num = semester[0] # '1학기'면 '1', '2학기'면 '2'
-        f_11 = df_11[df_11['학기'].astype(str).str.contains(sem_num)]
-        f_12 = df_12[df_12['학기'].astype(str).str.contains(sem_num)]
+        sem_num = semester[0] # '1' 또는 '2'
         
-        l_11 = f_11['과목명'].dropna().astype(str).unique().tolist()
-        l_12 = f_12['과목명'].dropna().astype(str).unique().tolist()
+        # '학기' 컬럼이 진짜 있는지 다시 한번 확인하고 필터링
+        if '학기' in df_11.columns:
+            f_11 = df_11[df_11['학기'].astype(str).str.contains(sem_num)]
+        else:
+            st.error("11학년 시트에서 '학기' 열을 찾을 수 없습니다.")
+            f_11 = pd.DataFrame()
+
+        if '학기' in df_12.columns:
+            f_12 = df_12[df_12['학기'].astype(str).str.contains(sem_num)]
+        else:
+            st.error("12학년 시트에서 '학기' 열을 찾을 수 없습니다.")
+            f_12 = pd.DataFrame()
         
-        # 12학년의 '계열(교과)' 정보를 딕셔너리로 저장
-        course_to_dept = dict(zip(f_12['과목명'].astype(str), f_12['계열(교과)'].astype(str)))
+        l_11 = f_11['과목명'].dropna().astype(str).unique().tolist() if not f_11.empty else []
+        l_12 = f_12['과목명'].dropna().astype(str).unique().tolist() if not f_12.empty else []
+        
+        course_to_dept = {}
+        if not f_12.empty and '계열(교과)' in f_12.columns:
+            course_to_dept = dict(zip(f_12['과목명'].astype(str), f_12['계열(교과)'].astype(str)))
         
         return l_11, l_12, course_to_dept
     except Exception as e:
-        st.error(f"🚨 학기 필터링 중 오류 발생 (시트에 '학기', '과목명' 열이 있는지 확인하세요): {e}")
+        st.error(f"🚨 데이터 처리 중 오류 발생: {e}")
         return [], [], {}
-
 # 현재 설정된 학기를 기준으로 과목 리스트 가져오기
 list_11, list_12, course_to_dept_dict = get_filtered_courses(st.session_state.target_semester)
 
