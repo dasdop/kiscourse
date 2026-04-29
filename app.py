@@ -39,13 +39,28 @@ def load_full_data():
         url_11 = f"https://docs.google.com/spreadsheets/d/{ID_11}/export?format=csv"
         url_12 = f"https://docs.google.com/spreadsheets/d/{ID_12}/export?format=csv"
         
-        # 💡 올려주신 사진 구조에 맞춰 정확한 위치(header) 지정
-        df_11 = pd.read_csv(url_11, header=1) # 11학년은 2번째 줄
-        df_12 = pd.read_csv(url_12, header=0) # 12학년은 1번째 줄
-        
-        # 💡 열 이름 앞뒤 띄어쓰기 강제 제거 (KeyError 완벽 방지)
-        df_11.columns = [str(c).strip() for c in df_11.columns]
-        df_12.columns = [str(c).strip() for c in df_12.columns]
+        def safe_load(url):
+            # 1. float 에러 원천 차단: 모든 데이터를 처음부터 무조건 '글자(str)'로 불러옵니다.
+            df = pd.read_csv(url, header=None, dtype=str) 
+            
+            # 2. '학기'와 '과목명'이 동시에 들어있는 진짜 제목줄을 샅샅이 뒤져서 찾습니다.
+            header_idx = 0
+            for i in range(len(df)):
+                # 해당 줄의 데이터를 앞뒤 공백 없앤 리스트로 변환
+                row_values = [str(val).strip() for val in df.iloc[i].values]
+                if '학기' in row_values and '과목명' in row_values:
+                    header_idx = i
+                    break
+            
+            # 3. 찾은 줄을 공식 열 이름(Columns)으로 승격시킵니다.
+            df.columns = [str(val).strip() for val in df.iloc[header_idx].values]
+            
+            # 4. 진짜 데이터(제목줄 아래 행들)만 남기고 정리합니다.
+            df = df.iloc[header_idx + 1:].reset_index(drop=True)
+            return df
+
+        df_11 = safe_load(url_11)
+        df_12 = safe_load(url_12)
         
         return df_11, df_12
     except Exception as e:
@@ -57,20 +72,24 @@ def get_filtered_courses(semester):
     if df_11 is None or df_12 is None: return [], [], {}
     
     try:
-        sem_num = semester[0] # '1학기'면 '1', '2학기'면 '2'
+        sem_num = semester[0] # '1학기'면 '1'
         
-        # 💡 na=False 속성을 추가하여 빈칸(NaN/float) 때문에 발생하는 에러 원천 차단
-        f_11 = df_11[df_11['학기'].astype(str).str.contains(sem_num, na=False)]
-        f_12 = df_12[df_12['학기'].astype(str).str.contains(sem_num, na=False)]
+        # 만약을 대비한 최종 방어 코드 (KeyError 방지)
+        if '학기' not in df_11.columns or '학기' not in df_12.columns:
+            st.error("🚨 '학기' 열을 찾지 못했습니다. 구글 시트 공유 권한이나 시트 내용을 다시 확인해주세요.")
+            return [], [], {}
+
+        # 빈칸(NaN)을 안전하게 처리하며 필터링
+        f_11 = df_11[df_11['학기'].fillna('').astype(str).str.contains(sem_num)]
+        f_12 = df_12[df_12['학기'].fillna('').astype(str).str.contains(sem_num)]
         
-        # 과목명 리스트 추출 (빈칸 제외, 앞뒤 띄어쓰기 제거)
         l_11 = f_11['과목명'].dropna().astype(str).str.strip().unique().tolist()
         l_12 = f_12['과목명'].dropna().astype(str).str.strip().unique().tolist()
         
-        # 계열(교과) 매핑 딕셔너리
         course_to_dept = {}
-        if not f_12.empty and '계열(교과)' in f_12.columns:
-            course_to_dept = dict(zip(f_12['과목명'].astype(str).str.strip(), f_12['계열(교과)'].astype(str).str.strip()))
+        if '계열(교과)' in f_12.columns:
+            course_to_dept = dict(zip(f_12['과목명'].fillna('').astype(str).str.strip(), 
+                                      f_12['계열(교과)'].fillna('').astype(str).str.strip()))
         
         return l_11, l_12, course_to_dept
     except Exception as e:
