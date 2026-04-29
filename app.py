@@ -107,7 +107,7 @@ with st.sidebar:
 # 5. 페이지 로직
 # [A] 로그인 화면 로직 수정본
  else:
-    st.title("🍏 KIS 수강신청 로그인")
+st.title("🍏 KIS 수강신청 로그인")
     with st.container(border=True):
         le = st.text_input("이메일").strip()  # 입력값 공백 제거
         lp = st.text_input("비밀번호", type="password").strip()
