@@ -22,14 +22,19 @@ ID_12 = "1xADYmy5iJEIiaENxCH1ZiqGU2yiFS81MfSQDCMsnO04"
 # user_grade_prefix = st.session_state.user_id[:2]
 
 # ✅ 수정할 코드 (안전장치 추가)
+# 접속 정보가 없으면 학번 입력창을 띄워줍니다.
 if 'user_id' not in st.session_state or not st.session_state.user_id:
-    # 💡 이 아래 두 줄은 반드시 Tab키 1번(또는 스페이스바 4번)이 눌려 있어야 합니다.
-    st.warning("⚠️ 접속 정보가 초기화되었습니다. 처음 화면으로 돌아가 다시 로그인해 주세요.")
-    st.stop()
+    st.warning("⚠️ 접속 정보가 없습니다. 아래에 학번을 다시 입력해 주세요.")
+    
+    # 학번 입력 칸과 확인 버튼 만들기
+    temp_id = st.text_input("학번 입력 (예: 1101):")
+    if st.button("접속하기"):
+        st.session_state.user_id = temp_id
+        st.rerun() # 👈 입력 후 화면을 스스로 새로고침해서 셔터를 올립니다!
+        
+    st.stop() # 학번을 입력하고 버튼을 누르기 전까지는 여기서 멈춰 대기합니다.
 
-# 💡 이 줄은 if문이 끝났으므로 다시 왼쪽 벽에 딱 붙어야 합니다! (들여쓰기 없음)
-user_grade_prefix = str(st.session_state.user_id)[:2]
-
+# 💡 이 줄은 왼쪽 벽에 딱 붙어있어야 합니다.
 user_grade_prefix = str(st.session_state.user_id)[:2] # 안전하게 문자로 바꾼 뒤 앞 2자리 자르기
 
 if user_grade_prefix == '10':
