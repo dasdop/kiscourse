@@ -3,38 +3,46 @@ import pandas as pd
 import os
 
 # ==========================================
-# 1. 데이터 설정 (여기에 본인의 사본 ID를 꼭 넣으세요!)
+# 🚨 1. 여기에 사본 시트 ID 2개를 꼭 넣으세요!
 # ==========================================
-ID_11 = "1Nfzop5JjziphJON7BGofEMJDM8TV31uY" # <- 11학년 시트 사본 ID
-ID_12 = "1NwYlD2X396Ux4NkRT_Dru3zsuolYeJrz" # <- 12학년 시트 사본 ID
+ID_11 = "1Nfzop5JjziphJON7BGofEMJDM8TV31uY" 
+ID_12 = "1NwYlD2X396Ux4NkRT_Dru3zsuolYeJrz" 
 
-@st.cache_data(ttl=600) # 10분마다 구글 시트 새로고침
+@st.cache_data(ttl=600)
 def load_course_data():
     url_11 = f"https://docs.google.com/spreadsheets/d/{ID_11}/export?format=csv"
     url_12 = f"https://docs.google.com/spreadsheets/d/{ID_12}/export?format=csv"
     try:
         df_11 = pd.read_csv(url_11)
         df_12 = pd.read_csv(url_12)
-        return df_11, df_12
+        
+        # S1 ~ S7 컬럼에서 과목 이름들을 모두 긁어모아서 리스트로 만드는 마법의 코드!
+        def extract_courses(df):
+            courses = []
+            for col in df.columns:
+                if col.startswith('S'): # S1, S2 등 S로 시작하는 컬럼만 찾음
+                    courses.extend(df[col].dropna().astype(str).tolist())
+            # 중복된 과목명 제거하고 가나다순 정렬
+            return sorted(list(set(courses)))
+
+        list_11 = extract_courses(df_11)
+        list_12 = extract_courses(df_12)
+        
+        return df_11, df_12, list_11, list_12
     except Exception as e:
-        st.error("🚨 구글 시트 접근 에러! 사본 ID가 맞는지, 권한이 '링크가 있는 모든 사용자(뷰어)'인지 확인하세요.")
-        return pd.DataFrame(), pd.DataFrame()
+        st.error(f"🚨 구글 시트 접근 에러: {e}")
+        return pd.DataFrame(), pd.DataFrame(), [], []
 
-df_11, df_12 = load_course_data()
+df_11, df_12, list_11, list_12 = load_course_data()
 
 # ==========================================
-# 2. 수강 배정 알고리즘 (핵심 로직)
+# 2. 수강 배정 알고리즘 (임시 정원 20명으로 설정)
 # ==========================================
-def run_assignment(students_df, df_11, df_12):
-    # 11, 12학년 과목 정원을 하나의 사전(Dictionary)으로 통합
-    capacities = {}
-    if not df_11.empty:
-        for _, row in df_11.iterrows(): capacities[row['과목명']] = row['정원']
-    if not df_12.empty:
-        for _, row in df_12.iterrows(): capacities[row['과목명']] = row['정원']
+def run_assignment(students_df, list_11, list_12):
+    # 정원 데이터가 시트에 없으므로, 모든 과목의 임시 정원을 20명으로 설정합니다.
+    capacities = {course: 20 for course in (list_11 + list_12)}
 
     results = []
-    # 12학년 우선 배정, 같은 학년 내에서는 학번 순 (고학년 우선 원칙)
     students_df = students_df.sort_values(by=['학년', '학번'], ascending=[False, True])
 
     for _, student in students_df.iterrows():
@@ -43,19 +51,13 @@ def run_assignment(students_df, df_11, df_12):
         
         for choice in choices:
             if pd.notna(choice) and choice in capacities and capacities[choice] > 0:
-                capacities[choice] -= 1 # 정원 1명 차감
-                results.append({
-                    '학번': student['학번'], '이름': student['이름'], 
-                    '학년': student['학년'], '배정과목': choice
-                })
+                capacities[choice] -= 1
+                results.append({'학번': student['학번'], '이름': student['이름'], '학년': student['학년'], '배정과목': choice})
                 assigned = True
                 break
                 
-        if not assigned: # 3지망까지 다 떨어졌을 경우
-            results.append({
-                '학번': student['학번'], '이름': student['이름'], 
-                '학년': student['학년'], '배정과목': '미배정(정원초과)'
-            })
+        if not assigned:
+            results.append({'학번': student['학번'], '이름': student['이름'], '학년': student['학년'], '배정과목': '미배정(정원초과)'})
             
     return pd.DataFrame(results)
 
@@ -64,14 +66,11 @@ def run_assignment(students_df, df_11, df_12):
 # ==========================================
 st.set_page_config(page_title="KIS 수강신청 시스템", page_icon="🍏", layout="centered")
 st.title("🍏 KIS 수강신청 및 배정 시스템")
-st.markdown("대회 전용 자동화 시스템입니다. 학생 신청 및 관리자 배정을 테스트해보세요.")
 
 tab1, tab2 = st.tabs(["📝 학생 수강신청", "⚙️ 관리자 대시보드"])
 
-# --- 탭 1: 학생 수강신청 ---
 with tab1:
     st.subheader("1. 학생 정보 및 학년 선택")
-    
     col1, col2 = st.columns(2)
     with col1:
         student_id = st.text_input("학번을 입력하세요 (예: 202601)")
@@ -79,17 +78,13 @@ with tab1:
     with col2:
         grade = st.radio("학년을 선택하세요", [11, 12], horizontal=True)
 
-    # 학년에 따른 과목 리스트 동적 생성
-    if grade == 11 and not df_11.empty:
-        course_list = df_11['과목명'].tolist()
-    elif grade == 12 and not df_12.empty:
-        course_list = df_12['과목명'].tolist()
-    else:
-        course_list = ["데이터를 불러오지 못했습니다."]
+    # 학년에 맞는 과목 리스트 띄우기
+    if grade == 11 and list_11: course_list = list_11
+    elif grade == 12 and list_12: course_list = list_12
+    else: course_list = ["데이터 대기중..."]
 
     st.divider()
     st.subheader(f"2. {grade}학년 희망 과목 선택")
-    
     choice_1 = st.selectbox("1지망 과목", course_list, key="c1")
     choice_2 = st.selectbox("2지망 과목", course_list, key="c2")
     choice_3 = st.selectbox("3지망 과목", course_list, key="c3")
@@ -97,39 +92,21 @@ with tab1:
     if st.button("🚀 신청서 최종 제출", use_container_width=True):
         if not student_id or not student_name:
             st.error("학번과 이름을 모두 입력해주세요!")
-        elif len(set([choice_1, choice_2, choice_3])) < 3:
-            st.warning("1, 2, 3지망은 서로 다른 과목을 선택해야 합니다!")
         else:
-            new_data = pd.DataFrame([{
-                '학번': student_id, '이름': student_name, '학년': grade,
-                '1지망': choice_1, '2지망': choice_2, '3지망': choice_3
-            }])
+            new_data = pd.DataFrame([{'학번': student_id, '이름': student_name, '학년': grade, '1지망': choice_1, '2지망': choice_2, '3지망': choice_3}])
             new_data.to_csv('students_data.csv', mode='a', header=not os.path.exists('students_data.csv'), index=False)
-            st.success(f"✅ {student_name} 학생({grade}학년)의 수강신청이 성공적으로 접수되었습니다!")
+            st.success(f"✅ {student_name} 학생({grade}학년) 수강신청 접수 완료!")
 
-# --- 탭 2: 관리자 대시보드 ---
 with tab2:
     st.subheader("수강 신청 현황 및 배정")
-    
     if os.path.exists('students_data.csv'):
         students_df = pd.read_csv('students_data.csv')
         st.write(f"현재 총 **{len(students_df)}명**의 학생이 신청을 완료했습니다.")
-        with st.expander("신청 명단 전체 보기"):
-            st.dataframe(students_df)
+        with st.expander("신청 명단 전체 보기"): st.dataframe(students_df)
         
         if st.button("✨ 수강 배정 알고리즘 실행하기", type="primary"):
-            st.toast("알고리즘 연산 중...", icon="⚙️")
-            final_results = run_assignment(students_df, df_11, df_12)
-            st.success("배정이 완료되었습니다! 아래 결과를 확인하세요.")
+            final_results = run_assignment(students_df, list_11, list_12)
+            st.success("배정 완료!")
             st.dataframe(final_results, use_container_width=True)
-            
-            # 결과를 CSV로 다운로드할 수 있는 버튼 제공
-            csv = final_results.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="📥 배정 결과 엑셀(CSV)로 다운로드",
-                data=csv,
-                file_name='kis_assignment_results.csv',
-                mime='text/csv',
-            )
     else:
-        st.info("아직 제출된 학생 신청 데이터가 없습니다. [학생 수강신청] 탭에서 테스트 데이터를 입력해보세요.")
+        st.info("아직 제출된 학생 데이터가 없습니다.")
