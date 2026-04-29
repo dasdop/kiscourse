@@ -76,7 +76,7 @@ hide_menu_style = """
 st.markdown(hide_menu_style, unsafe_allow_html=True)
 # --- 👆 여기까지 👆 ---
 
-st.title("🍏 KIS 수강신청 및 배정 시스템")
+
 st.title("🍏 KIS 수강신청 및 배정 시스템")
 
 tab1, tab2 = st.tabs(["📝 학생 수강신청", "⚙️ 관리자 대시보드"])
