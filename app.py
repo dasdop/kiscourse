@@ -435,13 +435,23 @@ elif st.session_state.page == "admin" and st.session_state.admin:
                 
                 st.success(f"'{lowest_course}' 과목이 폐강되었습니다."); st.rerun()
 
+
+# 현재 접속한 사람이 'admin' (또는 선생님이 정한 비밀번호/학번)일 때만 아래 코드를 실행합니다.
+if st.session_state.user_id == "admin":
+    st.markdown("---")
+    with st.expander("🛠️ [관리자 전용] 170명 신청 및 배정 만족도 시뮬레이션"):
+        st.info("💡 이 메뉴는 관리자 계정('admin')으로 접속했을 때만 보입니다.")
+        
+        # (여기에 아까 짜드린 시뮬레이션 코드 내용이 그대로 들어갑니다)
+        # col1, col2 = st.columns(2)
+        # ... (생략) ...
 import streamlit as st
 import pandas as pd
 import random
 
 st.markdown("---")
 with st.expander("🛠️ [관리자 전용] 170명 신청 및 배정 만족도 시뮬레이션"):
-    st.info("💡 7개 신청 그룹과 8개 신청 그룹에 대해 각각 170명씩 시뮬레이션을 돌려 배정 성공률을 비교합니다.")
+    st.info("💡 7개 신청 그룹과 8개 신청 그룹에 대해 각각 170명씩 시뮬레이션을 돌려 배정 성공률을 비교합니다.(시뮬레이션을 여러번 진행하면 약간의 오차가 있을 수 있습니다)")
 
     # 시뮬레이션 함수 정의 (재사용을 위해)
     def run_simulation(student_count, req_count, subject_list):
@@ -485,7 +495,7 @@ with st.expander("🛠️ [관리자 전용] 170명 신청 및 배정 만족도 
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("📊 11학년 신청 시뮬레이션 (170명)"):
+        if st.button("📊 11학년 신청 시뮬레이션 "):
             df7, rate7 = run_simulation(170, 7, list_11) # 예비 11학년 리스트 기준
             st.metric("평균 수강 만족도", f"{rate7:.1f}%")
             st.dataframe(df7, use_container_width=True)
@@ -493,7 +503,7 @@ with st.expander("🛠️ [관리자 전용] 170명 신청 및 배정 만족도 
             st.download_button("📥 7개 배정결과 다운로드", csv7, "sim_7ea.csv", "text/csv")
 
     with col2:
-        if st.button("📊 12학년 신청 시뮬레이션 (170명)"):
+        if st.button("📊 12학년 신청 시뮬레이션 "):
             df8, rate8 = run_simulation(170, 8, list_12) # 예비 12학년 리스트 기준
             st.metric("평균 수강 만족도", f"{rate8:.1f}%")
             st.dataframe(df8, use_container_width=True)
