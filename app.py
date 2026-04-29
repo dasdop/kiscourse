@@ -15,6 +15,18 @@ MAX_CAPACITY = 35
 TRACKS = ['인문사회계열', '자연공학계열', '예체능계열', '자유전공']
 
 st.set_page_config(page_title="KIS 수강신청", layout="wide", page_icon="🍏")
+# ==========================================
+# 🚨 긴급 데이터 초기화 버튼 (최상단 배치)
+# ==========================================
+with st.sidebar:
+    st.error("🛠️ 긴급 복구 메뉴")
+    if st.button("꼬인 데이터 강제 삭제", type="primary"):
+        import os
+        files = ['students_data.csv', 'final_results.csv', 'course_status.csv']
+        for f in files:
+            if os.path.exists(f): os.remove(f)
+        st.success("✅ 삭제 완료! 키보드 F5를 눌러 새로고침 하세요.")
+# ==========================================
 
 # --- 세션 상태 초기화 ---
 for key in ['login_email', 'user_name', 'user_id', 'admin']:
