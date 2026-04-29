@@ -399,3 +399,67 @@ elif st.session_state.page == "admin" and st.session_state.admin:
                 save_csv(status_df, 'course_status.csv')
                 
                 st.success(f"'{lowest_course}' 과목이 폐강되었습니다."); st.rerun()
+import streamlit as st
+import pandas as pd
+import random
+
+st.markdown("---")
+# 🚨 관리자만 열어볼 수 있도록 숨겨두는 탭(Expander)입니다.
+with st.expander("🛠️ [관리자 전용] 170명 수강신청 부하/데이터 테스트"):
+    st.warning("⚠️ 이 버튼을 누르면 170명의 가짜 수강신청 데이터가 즉시 생성됩니다.")
+    
+    if st.button("🚀 170명 가짜 데이터 생성 및 실험 시작!"):
+        with st.spinner("170명의 데이터를 생성하는 중입니다..."):
+            
+            # 가짜 학생 170명 학번 만들기 (10학년 85명, 11학년 85명 가정)
+            fake_students = []
+            for i in range(1, 86):
+                fake_students.append(f"10{i:02d}") # 1001 ~ 1085
+                fake_students.append(f"11{i:02d}") # 1101 ~ 1185
+                
+            simulated_data = []
+            
+            # 170명 각각에 대해 랜덤으로 과목을 골라주는 작업
+            for student_id in fake_students:
+                # 학번에 따라 11학년 리스트(list_11) 또는 12학년 리스트(list_12) 선택
+                # (이전에 선언해둔 list_11, list_12 변수를 그대로 사용합니다)
+                target_list = list_11 if student_id.startswith("10") else list_12
+                
+                # 리스트가 비어있지 않은지 안전 확인
+                if len(target_list) > 0:
+                    # A~H 블록에 들어갈 과목을 리스트에서 랜덤으로 8개 뽑기 (중복 허용)
+                    # 실제 환경과 비슷하게 만들기 위해 '미선택'도 들어갈 수 있게 설정
+                    random_choices = [random.choice(target_list) for _ in range(8)]
+                else:
+                    random_choices = ["데이터 없음"] * 8
+                    
+                simulated_data.append({
+                    "학번": student_id,
+                    "A블록": random_choices[0],
+                    "B블록": random_choices[1],
+                    "C블록": random_choices[2],
+                    "D블록": random_choices[3],
+                    "E블록": random_choices[4],
+                    "F블록": random_choices[5],
+                    "G블록": random_choices[6],
+                    "H블록": random_choices[7],
+                })
+                
+            # 만든 데이터를 보기 좋은 표(데이터프레임)로 변환
+            df_simulation = pd.DataFrame(simulated_data)
+            
+            st.success("✅ 170명 데이터 생성 완료!")
+            
+            # 1. 화면에 결과 살짝 보여주기
+            st.write("📊 **생성된 데이터 미리보기 (앞부분 10개만)**")
+            st.dataframe(df_simulation.head(10))
+            
+            # 2. 엑셀(CSV) 파일로 다운로드 할 수 있게 해주기 (가장 안전한 방법)
+            # 구글 시트에 한 번에 170줄을 쏘면 에러가 날 수 있으므로, 엑셀로 먼저 뽑아보는 걸 추천합니다!
+            csv = df_simulation.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 엑셀(CSV) 파일로 전체 다운로드 후 확인하기",
+                data=csv,
+                file_name='170명_수강신청_시뮬레이션.csv',
+                mime='text/csv',
+            )
