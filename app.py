@@ -48,10 +48,8 @@ df_11, df_12, list_11, list_12 = load_course_data()
 # 수강 배정 알고리즘
 # ==========================================
 def run_assignment(students_df, list_11, list_12):
-    # 모든 과목의 정원을 임시로 20명으로 설정
     capacities = {course: 20 for course in (list_11 + list_12)}
     results = []
-    # 고학년(12학년) 우선 배정
     students_df = students_df.sort_values(by=['학년', '학번'], ascending=[False, True])
 
     for _, student in students_df.iterrows():
@@ -92,9 +90,22 @@ with tab1:
 
     if st.button("신청서 제출", use_container_width=True):
         if s_id and s_name:
-            new_row = pd.DataFrame([{'학번': s_id, '이름': s_name, '학년': grade, '1지망': c1, '2지망': c2, '3지망': c3}])
-            new_row.to_csv('students_data.csv', mode='a', header=not os.path.exists('students_data.csv'), index=False)
-            st.success("✅ 신청이 완료되었습니다!")
+            is_duplicate = False
+            
+            # 이미 제출된 데이터가 있는지 확인하고 중복 검사
+            if os.path.exists('students_data.csv'):
+                existing_data = pd.read_csv('students_data.csv')
+                # 입력한 학번(문자열 처리)이 기존 학번 목록에 있는지 검사
+                if str(s_id) in existing_data['학번'].astype(str).values:
+                    is_duplicate = True
+            
+            if is_duplicate:
+                st.error(f"🚨 이미 수강신청이 완료된 학번({s_id})입니다. 중복 제출은 불가능합니다!")
+            else:
+                new_row = pd.DataFrame([{'학번': s_id, '이름': s_name, '학년': grade, '1지망': c1, '2지망': c2, '3지망': c3}])
+                new_row.to_csv('students_data.csv', mode='a', header=not os.path.exists('students_data.csv'), index=False)
+                st.success("✅ 신청이 완료되었습니다!")
+                st.balloons() # 축하 풍선 효과! 🎈
         else:
             st.warning("학번과 이름을 입력해주세요.")
 
@@ -107,7 +118,7 @@ with tab2:
         st.subheader("🔒 관리자 로그인")
         pw = st.text_input("비밀번호를 입력하세요", type="password")
         if st.button("로그인"):
-            if pw == "kis2026": # 👈 비밀번호는 여기서 수정 가능!
+            if pw == "kis2026": 
                 st.session_state.logged_in = True
                 st.rerun()
             else:
@@ -131,7 +142,7 @@ with tab2:
                 final_df = run_assignment(s_data, list_11, list_12)
                 st.subheader("📋 배정 결과")
                 st.dataframe(final_df, use_container_width=True)
-                # 결과 다운로드 기능
+                
                 csv = final_df.to_csv(index=False).encode('utf-8-sig')
                 st.download_button("엑셀 파일로 결과 다운로드", data=csv, file_name="assignment_results.csv", mime="text/csv")
         else:
