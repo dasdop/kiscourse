@@ -172,7 +172,18 @@ with st.sidebar:
             if os.path.exists(f): os.remove(f)
         st.success("✅ 초기화 완료! 키보드 F5를 눌러 새로고침 하세요.")
     st.divider()
-
+# 🌟 여기에 1단계 [관리자 제어판]을 넣습니다! 🌟
+    st.header("⚙️ 관리자 시스템 제어")
+    
+    # 이 라디오 버튼이 2단계(학생 화면)를 조종하는 리모컨이 됩니다.
+    app_status = st.radio("현재 시스템 단계 설정", ["준비중", "수강신청 진행", "과목거래 오픈"])
+    
+    if st.button("💾 시스템 단계 저장", use_container_width=True):
+        st.session_state.app_status = app_status
+        st.success(f"현재 시스템이 [{app_status}] 단계로 설정되었습니다.")
+        st.rerun()
+    
+    st.divider()
 # ==========================================
 # 🔑 1부: 로그인 / 회원가입
 # ==========================================
@@ -215,17 +226,75 @@ if st.session_state.login_email is None:
 # ==========================================
 # 📱 2부: 메인 네비게이션
 # ==========================================
-user_grade_prefix = st.session_state.user_id[:2]
-current_grade = 10 if user_grade_prefix == '10' else (11 if user_grade_prefix == '11' else 99)
-req_courses_count = 7 if current_grade == 10 else 8
+# 1. 로그인 안 되어 있으면 대시보드 접근 방지
+if st.session_state.login_email is None:
+    st.stop()
 
+# 2. 초기 페이지 설정 (아무 설정 없으면 대시보드로)
+if 'page' not in st.session_state:
+    st.session_state.page = "dashboard"
+
+# --- 사이드바 (공통 메뉴) ---
 with st.sidebar:
     st.write(f"🧑‍🎓 **{st.session_state.user_name}**님 ({st.session_state.user_id})")
     st.divider()
-    if st.button("📝 수강신청 / 보충신청"): st.session_state.page = "input"; st.rerun()
-    if st.button("📊 결과조회"): st.session_state.page = "check"; st.rerun()
-    if st.session_state.admin and st.button("⚙️ 관리자 대시보드"): st.session_state.page = "admin"; st.rerun()
-    if st.button("로그아웃"): st.session_state.clear(); st.rerun()
+    if st.button("🏠 메인 대시보드"): st.session_state.page = "dashboard"; st.rerun()
+    if st.button("🚪 로그아웃"): st.session_state.clear(); st.rerun()
+
+# --- 메인 화면 로직 ---
+
+# [A] 메인 대시보드 (버튼 4개 모여있는 곳)
+if st.session_state.page == "dashboard":
+    st.title(f"👋 반갑습니다, {st.session_state.user_name}님!")
+    st.info(f"현재 시스템 상태: **{st.session_state.app_status}**")
+    
+    col1, col2 = st.columns(2)
+    col3, col4 = st.columns(2)
+
+    with col1:
+        if st.button("📝 수강신청 하기", use_container_width=True, height=150):
+            if st.session_state.app_status == "수강신청 진행":
+                st.session_state.page = "input"; st.rerun()
+            else: st.error("지금은 신청 기간이 아닙니다.")
+
+    with col2:
+        if st.button("📊 배정 결과 조회", use_container_width=True, height=150):
+            st.session_state.page = "check"; st.rerun()
+
+    with col3:
+        t_label = "🤝 과목 거래소" + (" (OPEN)" if st.session_state.app_status == "과목거래 오픈" else " (준비중)")
+        if st.button(t_label, use_container_width=True, height=150):
+            if st.session_state.app_status == "과목거래 오픈":
+                st.session_state.page = "trade_market"; st.rerun()
+            else: st.warning("수강신청 종료 후 오픈됩니다.")
+
+    with col4:
+        if st.button("🔔 내 알림함", use_container_width=True, height=150):
+            st.session_state.page = "notifications"; st.rerun()
+
+# [B] 수강신청 페이지
+elif st.session_state.page == "input":
+    if st.button("⬅️ 뒤로가기"): st.session_state.page = "dashboard"; st.rerun()
+    # --- 여기에 기존의 [수강신청 폼 코드]를 넣어주세요 ---
+    st.write("수강신청 화면입니다.") 
+
+# [C] 결과 조회 페이지
+elif st.session_state.page == "check":
+    if st.button("⬅️ 뒤로가기"): st.session_state.page = "dashboard"; st.rerun()
+    # --- 여기에 기존의 [결과 조회 코드]를 넣어주세요 ---
+    st.write("결과 조회 화면입니다.")
+
+# [D] 과목 거래소 페이지
+elif st.session_state.page == "trade_market":
+    if st.button("⬅️ 뒤로가기"): st.session_state.page = "dashboard"; st.rerun()
+    # --- 여기에 아까 만든 [거래소 목록 코드]를 넣어주세요 ---
+    st.write("과목 거래소 화면입니다.")
+
+# [E] 알림함 페이지
+elif st.session_state.page == "notifications":
+    if st.button("⬅️ 뒤로가기"): st.session_state.page = "dashboard"; st.rerun()
+    # --- 여기에 아까 만든 [알림 내역 코드]를 넣어주세요 ---
+    st.write("알림함 화면입니다.")
 
 # -------------------------------------------
 # [페이지 1: 수강신청]
@@ -235,6 +304,13 @@ import streamlit as st
 # --- 1. 관리자 전용 제어판 (화면 왼쪽 사이드바에 배치) ---
 with st.sidebar:
     st.header("⚙️ 관리자 제어판")
+with st.sidebar:
+    st.header("⚙️ 관리자 시스템 제어")
+    app_status = st.radio("현재 시스템 단계", ["준비중", "수강신청 진행", "과목거래 오픈"])
+    if st.button("💾 시스템 단계 저장"):
+        st.session_state.app_status = app_status
+        st.success(f"현재 시스템이 [{app_status}] 단계로 설정되었습니다.")
+        st.rerun()
     
     # 학기 선택
     admin_semester = st.selectbox("수강신청 학기 설정", ["선택안함", "1학기", "2학기"])
