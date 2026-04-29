@@ -107,13 +107,48 @@ if st.session_state.login_email is None:
     st.stop()
 
 # 3. 메인 대시보드 및 결과 페이지
+# --- [사이드바 복구] ---
+with st.sidebar:
+    st.title("🍏 KIS 메뉴")
+    if st.session_state.login_email:
+        st.info(f"👤 {st.session_state.user_name}님 ({st.session_state.user_id})")
+        if st.button("🏠 메인 대시보드"): st.session_state.page = "dashboard"; st.rerun()
+        
+        # 관리자일 때만 보이는 사이드바 리모컨
+        if st.session_state.user_id == "admin":
+            st.divider()
+            st.subheader("⚙️ 시스템 제어")
+            st.session_state.app_status = st.radio("시스템 단계", ["준비중", "수강신청 진행", "과목거래 오픈"])
+            st.session_state.target_semester = st.selectbox("진행 학기", ["1학기", "2학기"])
+            if st.button("💾 설정 저장"): st.success("설정이 반영되었습니다!")
+            
+        if st.button("🚪 로그아웃"): st.session_state.clear(); st.rerun()
+
+# --- [메인 대시보드 버튼 복구] ---
 if st.session_state.page == "dashboard":
     st.title(f"👋 {st.session_state.user_name}님, 환영합니다!")
+    st.info(f"📢 현재 상태: **{st.session_state.app_status}** | 학기: **{st.session_state.target_semester}**")
+    
     col1, col2 = st.columns(2)
     with col1:
+        # 일반 기능
+        if st.button("📝 수강신청 하기", use_container_width=True):
+            if st.session_state.app_status == "수강신청 진행": st.session_state.page = "apply"; st.rerun()
+            else: st.error("지금은 신청 기간이 아닙니다.")
         if st.button("📊 배정 결과 조회", use_container_width=True): st.session_state.page = "result"; st.rerun()
+        
     with col2:
-        if st.button("🚪 로그아웃", use_container_width=True): st.session_state.clear(); st.rerun()
+        # 관리자 또는 알림 기능
+        if st.session_state.user_id == "admin":
+            if st.button("🚀 관리자 시스템 (배정/시뮬)", type="primary", use_container_width=True):
+                st.session_state.page = "admin_page"; st.rerun()
+        else:
+            if st.button("🔔 나의 알림함", use_container_width=True):
+                st.session_state.page = "noti"; st.rerun()
+        
+        if st.button("🤝 과목 거래소", use_container_width=True):
+            if st.session_state.app_status == "과목거래 오픈": st.session_state.page = "trade"; st.rerun()
+            else: st.warning("거래소가 아직 오픈되지 않았습니다.")
 
 elif st.session_state.page == "result":
     st.title("📊 나의 확정 시간표")
