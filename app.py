@@ -182,7 +182,7 @@ if st.session_state.login_email is None:
                 if users_df is not None:
                     user = users_df[(users_df['이메일'] == email_input) & (users_df['비밀번호'] == str(pw_input))]
                     if not user.empty:
-        st.session_state.update({'login_email': user.iloc[0]['이메일'], 'user_name': ... }) 
+                        st.session_state.update({'login_email': user.iloc[0]['이메일'], 'user_name': ... }) 
         # (여기에 로그인 성공 처리 코드가 이어서 있을 겁니다)
     else: 
         st.error("등록된 회원이 없거나 비밀번호가 틀렸습니다.")
