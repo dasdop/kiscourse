@@ -6,10 +6,29 @@ from datetime import datetime
 # ==========================================
 # 🚨 기본 설정 (시트 ID 입력)
 # ==========================================
-ID_11 = "1Yp79f79ilwA2ErJ6DoxRPbU_ADCq0PnRGH2TxGvKSDg"
-ID_12 = "1xADYmy5iJEIiaENxCH1ZiqGU2yiFS81MfSQDCMsnO04"
-SCHOOL_DOMAIN = "kshcm.net"  
-MAX_CAPACITY = 35  
+# ==========================================
+# 🚨 시트 ID 재확인 (여기가 틀리면 과목이 섞입니다)
+# ==========================================
+# 11학년(현재 10학년용) 과목 리스트 시트 ID
+ID_11 = "1Yp79f79ilwA2ErJ6DoxRPbU_ADCq0PnRGH2TxGvKSDg" 
+
+# 12학년(현재 11학년용) 과목 리스트 시트 ID
+ID_12 = "1xADYmy5iJEIiaENxCH1ZiqGU2yiFS81MfSQDCMsnO04" 
+
+# ------------------------------------------
+# 학번 앞자리(10..., 11...)에 따라 과목을 나누는 로직 재점검
+# ------------------------------------------
+user_grade_prefix = st.session_state.user_id[:2]  # 학번 앞 2자리
+
+if user_grade_prefix == '10':
+    current_grade = 10
+    clist = list_11  # 10학년(예비11)은 11학년 시트 데이터 사용
+elif user_grade_prefix == '11':
+    current_grade = 11
+    clist = list_12  # 11학년(예비12)은 12학년 시트 데이터 사용
+else:
+    current_grade = 99
+    clist = []
 
 # 💡 수정됨: 11학년(예비12학년) 전용 희망 교과(계열) 리스트 (시트의 데이터와 1:1 매칭)
 TRACKS = ['국어과', '영어과', '수학과', '사회과', '과학과', '베트남어과', '예술과', '정보과']
@@ -114,7 +133,7 @@ def save_csv(df, filename):
 # 🚨 긴급 데이터 초기화 메뉴 (사이드바 최상단)
 # ==========================================
 with st.sidebar:
-    st.error("🛠️ 긴급 복구 / 초기화")
+    st.error("🛠️ 긴급 복구 / 초기화-오류발생시쓰시오")
     if st.button("꼬인 데이터(CSV) 강제 삭제", type="primary"):
         for f in ['students_data.csv', 'final_results.csv', 'course_status.csv']:
             if os.path.exists(f): os.remove(f)
