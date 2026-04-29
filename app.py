@@ -18,6 +18,14 @@ ID_12 = "1Yp79f79ilwA2ErJ6DoxRPbU_ADCq0PnRGH2TxGvKSDg"
 # ------------------------------------------
 # 학번 앞자리(10..., 11...)에 따라 과목을 나누는 로직 재점검
 # ------------------------------------------
+# 기존 코드 (에러 유발)
+# user_grade_prefix = st.session_state.user_id[:2]
+
+# 🛠️ 수정된 코드 (안전장치 추가)
+if 'user_id' in st.session_state and st.session_state.user_id:
+    user_grade_prefix = st.session_state.user_id[:2]
+else:
+    user_grade_prefix = ""  # 아직 로그인/회원가입 전일 때는 빈칸으로 둠
 # ❌ 기존 코드 (문제가 된 부분)
 # user_grade_prefix = st.session_state.user_id[:2]
 
