@@ -65,6 +65,18 @@ def run_assignment(students_df, list_11, list_12):
 # 3. 웹사이트 UI 화면
 # ==========================================
 st.set_page_config(page_title="KIS 수강신청 시스템", page_icon="🍏", layout="centered")
+# --- 👇 여기서부터 복사해서 추가하세요 👇 ---
+hide_menu_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+    """
+st.markdown(hide_menu_style, unsafe_allow_html=True)
+# --- 👆 여기까지 👆 ---
+
+st.title("🍏 KIS 수강신청 및 배정 시스템")
 st.title("🍏 KIS 수강신청 및 배정 시스템")
 
 tab1, tab2 = st.tabs(["📝 학생 수강신청", "⚙️ 관리자 대시보드"])
