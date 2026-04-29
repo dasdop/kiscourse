@@ -4,6 +4,11 @@ import os
 from datetime import datetime
 import streamlit as st
 import pandas as pd
+import streamlit as st
+import pandas as pd
+
+# 🌟 반드시 여기에 먼저 선언해야 합니다!
+SCHOOL_DOMAIN = "kis.ac.kr"
 # (다른 import 문들이 있다면 그 아래에 작성)
 
 # 🌟 파일 맨 위에 도메인을 아예 고정해 둡니다! 🌟
