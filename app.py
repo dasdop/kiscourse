@@ -2,6 +2,14 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
+import streamlit as st
+import pandas as pd
+# (다른 import 문들이 있다면 그 아래에 작성)
+
+# 🌟 파일 맨 위에 도메인을 아예 고정해 둡니다! 🌟
+SCHOOL_DOMAIN = "kis.ac.kr" 
+
+# ... (중략) ...
 
 # ==========================================
 # 🚨 기본 설정 (시트 ID 입력)
@@ -184,11 +192,13 @@ if st.session_state.login_email is None:
                     if not user.empty:
                         st.session_state.update({'login_email': user.iloc[0]['이메일'], 'user_name': ... }) 
         # (여기에 로그인 성공 처리 코드가 이어서 있을 겁니다)
-    else: 
-        st.error("등록된 회원이 없거나 비밀번호가 틀렸습니다.")
-
-    st.divider()
-    if st.button("회원가입 하기", use_container_width=True): st.session_state.page = "signup"
+    elif st.session_state.page == "signup":
+    st.subheader("회원가입")
+    
+    # 여기서 SCHOOL_DOMAIN을 그대로 사용합니다.
+    new_email = st.text_input("학교 이메일", placeholder=f"ID@{SCHOOL_DOMAIN}") 
+    
+    # (나머지 회원가입 코드들...)
     elif st.session_state.page == "signup":
         st.title("📝 KIS 수강신청 회원가입")
         with st.container(border=True):
