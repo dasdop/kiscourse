@@ -131,7 +131,26 @@ elif st.session_state.page == "apply":
             new_data = {'제출시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '학번': st.session_state.user_id, '이름': st.session_state.user_name, '학년': cur_grade, '희망계열': my_track, '신청과목': ",".join(selected)}
             pd.DataFrame([new_data]).to_csv('students_data.csv', mode='a', header=not os.path.exists('students_data.csv'), index=False, encoding='utf-8-sig')
             st.success("신청되었습니다!"); st.session_state.page = "dashboard"; st.rerun()
-
+# 4. 시뮬레이션 함수
+def run_simulation(student_count, req_count, subject_list):
+    data = []
+    total_satisfaction = 0
+    for i in range(student_count):
+        std_id = f"SIM-{req_count}-{i+1:03d}"
+        requested = random.sample(subject_list, min(req_count, len(subject_list)))
+        assigned = requested.copy()
+        # 15% 확률로 1과목 튕김 가정 (시뮬레이션용)
+        if random.random() < 0.15:
+            idx = random.randrange(len(assigned))
+            assigned.pop(idx)
+            remainders = list(set(subject_list) - set(assigned))
+            if remainders: assigned.append(random.choice(remainders))
+        
+        match_count = len(set(requested) & set(assigned))
+        sat = (match_count / req_count) * 100
+        total_satisfaction += sat
+        data.append({"학번": std_id, "만족도(%)": round(sat, 1), "상태": "✅ 완벽" if sat == 100 else "⚠️ 변경됨"})
+    return pd.DataFrame(data), total_satisfaction / student_count
 # [D] 결과 조회 로직 (상세)
 elif st.session_state.page == "result":
     st.title("📊 배정 결과")
