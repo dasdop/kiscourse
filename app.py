@@ -132,18 +132,61 @@ elif st.session_state.page == "apply":
             pd.DataFrame([new_data]).to_csv('students_data.csv', mode='a', header=not os.path.exists('students_data.csv'), index=False, encoding='utf-8-sig')
             st.success("신청되었습니다!"); st.session_state.page = "dashboard"; st.rerun()
 
-# [D] 결과 조회 로직 (상세)
+# [D] 결과 조회 로직 (상세 - 시간표 시각화 포함)
 elif st.session_state.page == "result":
-    st.title("📊 배정 결과")
+    st.title("📊 배정 결과 및 시간표")
     if st.button("⬅️ 메인으로"): st.session_state.page = "dashboard"; st.rerun()
+
+    # 학번 기반 학년 판별 및 데이터 로드
+    u_id = str(st.session_state.user_id)
+    if u_id.startswith("11"):
+        target_grade = "12학년"
+        grade_cfg = GRADE_CONFIG["12학년"]
+    else:
+        target_grade = "11학년"
+        grade_cfg = GRADE_CONFIG["11학년"]
+
     res_df = get_csv_df('final_results.csv')
+    
     if res_df is not None:
-        my_res = res_df[res_df['학번'].astype(str) == str(st.session_state.user_id)]
+        my_res = res_df[res_df['학번'].astype(str) == u_id]
         if not my_res.empty:
-            st.success(f"✅ 확정: {my_res.iloc[0]['확정과목']}")
-            st.error(f"❌ 탈락: {my_res.iloc[0]['탈락과목']}")
+            # 1. 텍스트 결과 표시
+            confirmed_str = my_res.iloc[0]['확정과목']
+            confirmed_subs = [s.strip() for s in confirmed_str.split(',')]
+            
+            st.success(f"✅ {target_grade} 확정 과목: {confirmed_str}")
+            
+            # 2. 시간표 행렬 생성
+            DAYS = ["월", "화", "수", "목", "금"]
+            PERIODS = ["1교시", "2교시", "3교시", "4교시", "5교시", "6교시", "7교시", "8교시"]
+            tt = pd.DataFrame(index=PERIODS, columns=DAYS).fillna("")
+            
+            # [공통 배치] 흰색 칸
+            for sub, slots in grade_cfg["common"].items():
+                for d, p in slots: tt.at[p, d] = f"⭐ {sub}"
+            
+            # [선택 배치] 유색 칸
+            for sub in confirmed_subs:
+                for g_name, g_subs in grade_cfg["groups"].items():
+                    if sub in g_subs:
+                        for d, p in grade_cfg["slots"][g_name]:
+                            if tt.at[p, d] == "": tt.at[p, d] = sub
+
+            # [고정 시간] 창체
+            tt.at["7교시", "금"] = "창체"; tt.at["8교시", "금"] = "창체"
+
+            # 3. 시각화 스타일 정의
+            def style_tt(val):
+                if "⭐" in val: return 'background-color: white; color: black; border: 1px solid #ddd; font-weight: bold'
+                if val == "": return 'background-color: #f8f9fa'
+                if val == "창체": return 'background-color: #eee'
+                return 'background-color: #D1E9FF; color: #004085; font-weight: bold'
+
+            st.table(tt.style.applymap(style_tt))
+            
         else: st.warning("배정 결과가 없습니다.")
-    else: st.info("관리자가 배정을 가동하지 않았습니다.")
+    else: st.info("관리자가 배정 결과를 아직 확정하지 않았습니다.")
 
 # [E] 관리자 전용 배정 시스템
 import streamlit as st
