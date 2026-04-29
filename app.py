@@ -252,7 +252,7 @@ if st.session_state.page == "input":
             else:
                 st.info("💡 **예비 12학년 안내:** 공통과목 1개는 자동 배정됩니다. 본인의 희망 계열(교과)을 선택한 후 **선택과목 8개**를 골라주세요. (계열 우대)")
                 st.subheader("1. 본인의 희망 계열(교과) 선택")
-                my_track = st.selectbox("희망 계열 (배정 1순위 우대)", TRACKS)
+                my_track = st.selectbox("희망 계열(교과) (배정 1순위 우대)", TRACKS)
             
             st.subheader(f"{'1' if current_grade==10 else '2'}. {st.session_state.target_semester} 과목 고르기 (반드시 {max_sel}개 선택)")
             
