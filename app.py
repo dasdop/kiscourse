@@ -6,32 +6,21 @@ from datetime import datetime
 # ==========================================
 # 🚨 기본 설정 (시트 ID 입력)
 # ==========================================
-ID_11 = "1xADYmy5iJEIiaENxCH1ZiqGU2yiFS81MfSQDCMsnO04"  # <- 여기에 11학년 시트 ID를 넣으세요
-ID_12 = "11Yp79f79ilwA2ErJ6DoxRPbU_ADCq0PnRGH2TxGvKSDgD"  # <- 여기에 12학년 시트 ID를 넣으세요
+ID_11 = "1Yp79f79ilwA2ErJ6DoxRPbU_ADCq0PnRGH2TxGvKSDg"
+ID_12 = "1xADYmy5iJEIiaENxCH1ZiqGU2yiFS81MfSQDCMsnO04"
 SCHOOL_DOMAIN = "kshcm.net"  
 MAX_CAPACITY = 35  
 
-# 11학년(예비12학년) 전용 희망계열
-TRACKS = ['인문사회계열', '자연공학계열', '예체능계열', '자유전공']
+# 💡 수정됨: 11학년(예비12학년) 전용 희망 교과(계열) 리스트 (시트의 데이터와 1:1 매칭)
+TRACKS = ['국어과', '영어과', '수학과', '사회과', '과학과', '베트남어과', '예술과', '정보과']
 
 st.set_page_config(page_title="KIS 수강신청", layout="wide", page_icon="🍏")
-# ==========================================
-# 🚨 긴급 데이터 초기화 버튼 (최상단 배치)
-# ==========================================
-with st.sidebar:
-    st.error("🛠️ 긴급 복구 메뉴")
-    if st.button("꼬인 데이터 강제 삭제", type="primary"):
-        import os
-        files = ['students_data.csv', 'final_results.csv', 'course_status.csv']
-        for f in files:
-            if os.path.exists(f): os.remove(f)
-        st.success("✅ 삭제 완료! 키보드 F5를 눌러 새로고침 하세요.")
-# ==========================================
 
 # --- 세션 상태 초기화 ---
 for key in ['login_email', 'user_name', 'user_id', 'admin']:
     if key not in st.session_state: st.session_state[key] = None if key != 'admin' else False
 if 'page' not in st.session_state: st.session_state.page = "login"
+if 'target_semester' not in st.session_state: st.session_state.target_semester = "1학기" # 학기 기본값
 
 # ==========================================
 # 🛠️ 헬퍼 함수 
@@ -45,38 +34,47 @@ def is_valid_sid_format(sid):
     return 1 <= student_num <= 35
 
 @st.cache_data(ttl=60)
-def load_course_data():
+def load_full_data():
     try:
         url_11 = f"https://docs.google.com/spreadsheets/d/{ID_11}/export?format=csv"
         url_12 = f"https://docs.google.com/spreadsheets/d/{ID_12}/export?format=csv"
         
-        # 💡 핵심 1: 11학년 시트는 2번째 줄(index 1)이 진짜 헤더입니다 (header=1 옵션)
+        # 11학년 시트는 2번째 줄(index 1)이 진짜 헤더 / 12학년은 1번째 줄
         df_11 = pd.read_csv(url_11, header=1)
-        # 💡 핵심 2: 12학년 시트는 1번째 줄이 헤더입니다.
         df_12 = pd.read_csv(url_12)
+        return df_11, df_12
+    except Exception as e:
+        st.error(f"🚨 시트 데이터를 불러오지 못했습니다: {e}")
+        return None, None
+
+def get_filtered_courses(semester):
+    df_11, df_12 = load_full_data()
+    if df_11 is None or df_12 is None: return [], [], {}
+    
+    try:
+        # '학기' 열에서 선택된 학기(예: '1')가 포함된 행만 필터링
+        sem_num = semester[0] # '1학기'면 '1', '2학기'면 '2'
+        f_11 = df_11[df_11['학기'].astype(str).str.contains(sem_num)]
+        f_12 = df_12[df_12['학기'].astype(str).str.contains(sem_num)]
         
-        # '과목명' 열 데이터만 추출
-        l_11 = df_11['과목명'].dropna().astype(str).tolist()
-        l_12 = df_12['과목명'].dropna().astype(str).tolist()
+        l_11 = f_11['과목명'].dropna().astype(str).unique().tolist()
+        l_12 = f_12['과목명'].dropna().astype(str).unique().tolist()
         
-        # 12학년의 '계열(교과)' 정보를 딕셔너리로 저장 (우선순위 배정용)
-        # 예: {'21세기 문학 탐구': '국어과', '수학 과제 탐구': '수학과'}
-        course_to_dept = dict(zip(df_12['과목명'].astype(str), df_12['계열(교과)'].astype(str)))
+        # 12학년의 '계열(교과)' 정보를 딕셔너리로 저장
+        course_to_dept = dict(zip(f_12['과목명'].astype(str), f_12['계열(교과)'].astype(str)))
         
         return l_11, l_12, course_to_dept
     except Exception as e:
-        st.error(f"🚨 시트 데이터를 불러오지 못했습니다. (ID 오류 또는 권한 문제)\n에러 상세: {e}")
+        st.error(f"🚨 학기 필터링 중 오류 발생 (시트에 '학기', '과목명' 열이 있는지 확인하세요): {e}")
         return [], [], {}
 
-list_11, list_12, course_to_dept_dict = load_course_data()
+# 현재 설정된 학기를 기준으로 과목 리스트 가져오기
+list_11, list_12, course_to_dept_dict = get_filtered_courses(st.session_state.target_semester)
 
-# 시트의 '국어과', '수학과' 등을 학생이 선택한 '희망계열'과 연결해주는 함수
+# 💡 수정됨: 시트의 '계열(교과)' 칸에 적힌 글자를 그대로 반환하여 매칭합니다.
 def get_course_track(course_name, dept_dict):
-    dept = dept_dict.get(course_name, "")
-    if "국어" in dept or "영어" in dept or "사회" in dept or "역사" in dept: return '인문사회계열'
-    if "수학" in dept or "과학" in dept or "정보" in dept: return '자연공학계열'
-    if "체육" in dept or "음악" in dept or "미술" in dept or "예술" in dept: return '예체능계열'
-    return '자유전공'
+    dept = dept_dict.get(course_name, "기타")
+    return str(dept).strip()
 
 def get_csv_df(filename):
     if os.path.exists(filename): return pd.read_csv(filename)
@@ -86,17 +84,28 @@ def save_csv(df, filename):
     df.to_csv(filename, index=False, encoding='utf-8-sig')
 
 # ==========================================
+# 🚨 긴급 데이터 초기화 메뉴 (사이드바 최상단)
+# ==========================================
+with st.sidebar:
+    st.error("🛠️ 긴급 복구 / 초기화")
+    if st.button("꼬인 데이터(CSV) 강제 삭제", type="primary"):
+        for f in ['students_data.csv', 'final_results.csv', 'course_status.csv']:
+            if os.path.exists(f): os.remove(f)
+        st.success("✅ 초기화 완료! 키보드 F5를 눌러 새로고침 하세요.")
+    st.divider()
+
+# ==========================================
 # 🔑 1부: 로그인 / 회원가입
 # ==========================================
 if st.session_state.login_email is None:
     if st.session_state.page == "login":
-        st.title("🍏 KIS 수강신청 로그인")
+        st.title(f"🍏 KIS {st.session_state.target_semester} 수강신청 로그인")
         with st.container(border=True):
             email_input = st.text_input("학교 이메일 (@kshcm.net)")
             pw_input = st.text_input("비밀번호", type="password")
             if st.button("로그인", type="primary", use_container_width=True):
                 if email_input == "admin@kshcm.net" and pw_input == "admin":
-                    st.session_state.update({'login_email': email_input, 'user_name': '관리자', 'user_id': '99999', 'admin': True, 'page': 'input'}); st.rerun()
+                    st.session_state.update({'login_email': email_input, 'user_name': '관리자', 'user_id': '99999', 'admin': True, 'page': 'admin'}); st.rerun()
                 
                 users_df = get_csv_df('users.csv')
                 if users_df is not None:
@@ -128,12 +137,10 @@ if st.session_state.login_email is None:
     st.stop()
 
 # ==========================================
-# 📱 2부: 사이드바 및 메인
+# 📱 2부: 메인 네비게이션
 # ==========================================
 user_grade_prefix = st.session_state.user_id[:2]
 current_grade = 10 if user_grade_prefix == '10' else (11 if user_grade_prefix == '11' else 99)
-target_grade = 11 if current_grade == 10 else 12
-
 req_courses_count = 7 if current_grade == 10 else 8
 
 with st.sidebar:
@@ -148,7 +155,7 @@ with st.sidebar:
 # [페이지 1: 수강신청]
 # -------------------------------------------
 if st.session_state.page == "input":
-    st.title("📝 KIS 수강신청")
+    st.title(f"📝 {st.session_state.target_semester} 수강신청")
     
     exist_df = get_csv_df('students_data.csv')
     has_applied = exist_df is not None and str(st.session_state.user_id) in exist_df['학번'].astype(str).values
@@ -167,10 +174,10 @@ if st.session_state.page == "input":
         st.success("✅ 수강신청이 완료되어 심사 중이거나 최종 확정되었습니다.")
         st.info("결과조회 탭을 확인하세요.")
     else:
-        max_sel = req_courses_count - len(assigned_courses) # 고를 수 있는 최대 개수
+        max_sel = req_courses_count - len(assigned_courses)
         
         if need_more:
-            st.warning(f"🚨 1차 배정 결과 탈락/폐강된 과목이 있습니다. {max_sel}개의 선택과목을 추가로 골라주세요.")
+            st.warning(f"🚨 1차 배정 탈락/폐강 과목이 있습니다. {max_sel}개의 {st.session_state.target_semester} 선택과목을 추가로 골라주세요.")
         
         with st.form("apply_form"):
             clist = list_11 if current_grade == 10 else list_12
@@ -180,13 +187,12 @@ if st.session_state.page == "input":
                 st.info("💡 **예비 11학년 안내:** 공통과목 3개는 자동 배정됩니다. 아래에서 **선택과목 7개**를 골라주세요. (100% 선착순)")
                 my_track = "해당없음"
             else:
-                st.info("💡 **예비 12학년 안내:** 공통과목 1개는 자동 배정됩니다. 본인의 희망 계열을 선택한 후 **선택과목 8개**를 골라주세요. (계열 우대)")
-                st.subheader("1. 본인의 희망 계열 선택")
+                st.info("💡 **예비 12학년 안내:** 공통과목 1개는 자동 배정됩니다. 본인의 희망 계열(교과)을 선택한 후 **선택과목 8개**를 골라주세요. (계열 우대)")
+                st.subheader("1. 본인의 희망 계열(교과) 선택")
                 my_track = st.selectbox("희망 계열 (배정 1순위 우대)", TRACKS)
             
-            st.subheader(f"{'1' if current_grade==10 else '2'}. 선택과목 고르기 (반드시 {max_sel}개 선택)")
+            st.subheader(f"{'1' if current_grade==10 else '2'}. {st.session_state.target_semester} 과목 고르기 (반드시 {max_sel}개 선택)")
             
-            # 💡 핵심 3: max_selections를 설정해 초과 선택을 시스템적으로 차단!
             selected_courses = st.multiselect(
                 "과목 리스트", 
                 clist, 
@@ -200,25 +206,23 @@ if st.session_state.page == "input":
                 else:
                     ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     courses_str = ",".join(selected_courses)
-                    
                     new_data = {'제출시간': ts, '학번': st.session_state.user_id, '이름': st.session_state.user_name, '학년': current_grade, '희망계열': my_track, '신청과목': courses_str}
                     
                     if not need_more:
                         pd.DataFrame([new_data]).to_csv('students_data.csv', mode='a', header=not os.path.exists('students_data.csv'), index=False, encoding='utf-8-sig')
-                        st.success("1차 신청 완료!"); st.rerun()
+                        st.success(f"{st.session_state.target_semester} 1차 신청 완료!"); st.rerun()
                     else:
                         exist_df.loc[exist_df['학번'].astype(str) == str(st.session_state.user_id), '신청과목'] += "," + courses_str
                         save_csv(exist_df, 'students_data.csv')
-                        st.success("2차 보충 신청 완료!"); st.rerun()
+                        st.success(f"{st.session_state.target_semester} 2차 보충 신청 완료!"); st.rerun()
 
 # -------------------------------------------
 # [페이지 2: 결과 조회]
 # -------------------------------------------
 elif st.session_state.page == "check":
-    st.title("📊 나의 수강 배정 결과")
+    st.title(f"📊 나의 {st.session_state.target_semester} 수강 배정 결과")
     df = get_csv_df('final_results.csv')
     
-    # 에러 방지: 학번 기준으로 필터링 (이메일 기준 삭제)
     if df is not None and str(st.session_state.user_id) in df['학번'].astype(str).values:
         my_data = df[df['학번'].astype(str) == str(st.session_state.user_id)].iloc[0]
         confirmed = str(my_data.get('확정과목', '')).split(',')
@@ -244,16 +248,22 @@ elif st.session_state.page == "check":
 elif st.session_state.page == "admin" and st.session_state.admin:
     st.title("⚙️ 관리자 종합 배정 시스템")
     
-    students = get_csv_df('students_data.csv')
+    with st.expander("📅 현재 수강신청 학기 설정", expanded=True):
+        selected_sem = st.radio("배정 및 신청을 진행할 학기를 선택하세요", ["1학기", "2학기"], index=0 if st.session_state.target_semester == "1학기" else 1)
+        if st.button("학기 설정 저장"):
+            st.session_state.target_semester = selected_sem
+            st.success(f"현재 시스템이 {selected_sem} 모드로 전환되었습니다. 학생들의 신청 화면이 변경됩니다.")
+            st.rerun()
+
+    st.info(f"현재 **{st.session_state.target_semester}**용 알고리즘이 가동 준비 중입니다.")
     
+    students = get_csv_df('students_data.csv')
     if students is not None:
         st.write(f"현재 총 신청 학생 수: {len(students)}명")
         st.divider()
         st.subheader("🚀 1, 2차 통합 배정 알고리즘 가동")
-        st.write("- **10학년(예비11):** 100% 제출시간(선착순) 배정")
-        st.write("- **11학년(예비12):** 1순위 계열 일치(스프레드시트 연동), 2순위 제출시간 배정")
         
-        if st.button("알고리즘 가동하기", type="primary"):
+        if st.button(f"{st.session_state.target_semester} 배정 알고리즘 가동하기", type="primary"):
             requests = []
             for _, row in students.iterrows():
                 sid = str(row['학번'])
@@ -273,10 +283,9 @@ elif st.session_state.page == "admin" and st.session_state.admin:
                 target_grade_of_course = c_df['학년'].iloc[0] 
                 
                 if target_grade_of_course == 10:
-                    # 10학년 신청 -> 100% 선착순
                     c_df = c_df.sort_values(by='시간', ascending=True)
                 else:
-                    # 11학년 신청 -> 스프레드시트의 '계열(교과)'를 읽어와 일치 여부 확인
+                    # 학생이 고른 '국어과' 등과 시트의 '계열(교과)'를 직접 비교
                     course_track = get_course_track(course, course_to_dept_dict)
                     c_df['계열일치'] = c_df['학생계열'] == course_track
                     c_df = c_df.sort_values(by=['계열일치', '시간'], ascending=[False, True])
@@ -299,13 +308,12 @@ elif st.session_state.page == "admin" and st.session_state.admin:
             save_csv(pd.DataFrame(res_list), 'final_results.csv')
             save_csv(pd.DataFrame(list(course_counts.items()), columns=['과목명', '배정인원']), 'course_status.csv')
             
-            st.success("배정이 완료되었습니다! 학생들이 '결과조회'에서 결과를 확인할 수 있습니다.")
+            st.success("배정이 완료되었습니다! 학생들이 '결과조회'에서 확인할 수 있습니다.")
         
         st.divider()
-        st.subheader("🗑️ 3차 최종: 인원 미달 과목 폐강 및 조정")
-        
+        st.subheader("🗑️ 3차 최종: 인원 미달 과목 폐강")
         status_df = get_csv_df('course_status.csv')
-        if status_df is not None:
+        if status_df is not None and not status_df.empty:
             st.dataframe(status_df.sort_values(by='배정인원', ascending=False))
             
             lowest_course = status_df.sort_values(by='배정인원').iloc[0]['과목명']
@@ -324,8 +332,7 @@ elif st.session_state.page == "admin" and st.session_state.admin:
                         res_df.at[idx, '탈락과목'] = ",".join([r for r in rejected if r])
                 
                 save_csv(res_df, 'final_results.csv')
-                
                 status_df = status_df[status_df['과목명'] != lowest_course]
                 save_csv(status_df, 'course_status.csv')
                 
-                st.success(f"'{lowest_course}' 과목이 폐강되었습니다. 해당 과목 신청 학생들은 2차 보충 신청을 해야 합니다."); st.rerun()
+                st.success(f"'{lowest_course}' 과목이 폐강되었습니다."); st.rerun()
