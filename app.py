@@ -217,6 +217,41 @@ with st.sidebar:
 # -------------------------------------------
 # [페이지 1: 수강신청]
 # -------------------------------------------
+import streamlit as st
+
+# --- 1. 관리자 전용 제어판 (화면 왼쪽 사이드바에 배치) ---
+with st.sidebar:
+    st.header("⚙️ 관리자 제어판")
+    
+    # 학기 선택
+    admin_semester = st.selectbox("수강신청 학기 설정", ["선택안함", "1학기", "2학기"])
+    
+    # 오픈/마감 버튼
+    if st.button("💾 설정 저장 및 수강신청 오픈"):
+        if admin_semester == "선택안함":
+            st.session_state.is_open = False
+            st.error("학기를 먼저 선택해 주세요!")
+        else:
+            st.session_state.is_open = True
+            st.session_state.current_semester = admin_semester
+            st.success(f"{admin_semester} 수강신청이 오픈되었습니다!")
+            st.rerun()
+            
+    if st.button("🔒 수강신청 마감 (접근 차단)"):
+        st.session_state.is_open = False
+        st.warning("수강신청이 마감되었습니다.")
+        st.rerun()
+
+# --- 2. 학생 화면 (게이트) ---
+# 관리자가 오픈하지 않았다면 여기서 화면 출력을 멈춥니다.
+if 'is_open' not in st.session_state or not st.session_state.is_open:
+    st.warning("⚠️ 현재 수강신청 기간이 아닙니다. 관리자가 설정을 완료할 때까지 기다려주세요.")
+    st.stop() # 👈 핵심! 이 줄 아래의 수강신청 코드는 아예 실행되지 않음
+
+# --- 여기서부터 진짜 수강신청 화면 시작 ---
+st.info(f"✅ 현재 **{st.session_state.current_semester}** 수강신청이 진행 중입니다.")
+
+# (이 아래에 기존에 만들었던 학번 입력창, 과목 선택, 시뮬레이션 코드 등을 넣으시면 됩니다.)
 if st.session_state.page == "input":
     st.title(f"📝 {st.session_state.target_semester} 수강신청")
     
