@@ -6,8 +6,8 @@ from datetime import datetime
 # ==========================================
 # 🚨 기본 설정 (시트 ID 입력)
 # ==========================================
-ID_11 = "11학년_시트_ID"  # <- 여기에 11학년 시트 ID를 넣으세요
-ID_12 = "12학년_시트_ID"  # <- 여기에 12학년 시트 ID를 넣으세요
+ID_11 = "1xADYmy5iJEIiaENxCH1ZiqGU2yiFS81MfSQDCMsnO04"  # <- 여기에 11학년 시트 ID를 넣으세요
+ID_12 = "11Yp79f79ilwA2ErJ6DoxRPbU_ADCq0PnRGH2TxGvKSDgD"  # <- 여기에 12학년 시트 ID를 넣으세요
 SCHOOL_DOMAIN = "kshcm.net"  
 MAX_CAPACITY = 35  
 
