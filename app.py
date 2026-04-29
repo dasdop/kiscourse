@@ -177,8 +177,6 @@ elif st.session_state.page == "apply":
             st.success("신청되었습니다!"); st.session_state.page = "dashboard"; st.rerun()
 
 # [D] 결과 조회 로직 (상세 - 시간표 시각화 포함)
-# --- 코드 상단에 반드시 추가해야 하는 설정값 ---
-
 elif st.session_state.page == "result":
     st.title("📊 배정 결과 및 시간표")
     if st.button("⬅️ 메인으로"): st.session_state.page = "dashboard"; st.rerun()
@@ -233,7 +231,6 @@ elif st.session_state.page == "result":
             
         else: st.warning("배정 결과가 없습니다.")
     else: st.info("관리자가 배정 결과를 아직 확정하지 않았습니다.")
-
 # [E] 관리자 전용 배정 시스템
 import streamlit as st
 import pandas as pd
