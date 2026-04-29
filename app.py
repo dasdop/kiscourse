@@ -189,8 +189,6 @@ if st.session_state.login_email is None:
 
     st.divider()
     if st.button("회원가입 하기", use_container_width=True): st.session_state.page = "signup"
-            if st.button("회원가입 하기", use_container_width=True): st.session_state.page = "signup"; st.rerun()
-
     elif st.session_state.page == "signup":
         st.title("📝 KIS 수강신청 회원가입")
         with st.container(border=True):
