@@ -405,68 +405,62 @@ import pandas as pd
 import random
 
 st.markdown("---")
-with st.expander("🛠️ [관리자 전용] 170명 신청 및 배정 결과 시뮬레이션"):
-    st.info("💡 학생이 신청한 과목과 시스템이 최종 배정한 과목을 비교합니다. (블록 시간표 제외)")
-    
-    if st.button("🚀 170명 신청 및 배정 결과 생성!"):
-        with st.spinner("데이터를 생성하는 중입니다..."):
-            
-            # 1. 170명 학번 세팅 (10학년 85명, 11학년 85명)
-            fake_students = []
-            for i in range(1, 86):
-                fake_students.append(f"10{i:02d}")
-                fake_students.append(f"11{i:02d}")
-                
-            simulated_data = []
-            
-            for student_id in fake_students:
-                # 2. 학년에 따른 타겟 리스트와 신청 개수 설정
-                target_list = list_11 if student_id.startswith("10") else list_12
-                req_count = 7 if student_id.startswith("10") else 8
-                
-                # 시트의 과목 수가 충분한지 안전 확인
-                if len(target_list) >= req_count:
-                    # 3. [신청] 학생이 원하는 과목을 선택함
-                    requested = random.sample(target_list, req_count)
-                    
-                    # 4. [배정] 학교 시스템에서 과목을 확정함
-                    assigned = requested.copy()
-                    
-                    # 시뮬레이션 리얼리티: 10%의 확률로 인기 과목에서 튕겨서 다른 과목으로 배정됨
-                    if random.random() < 0.10: 
-                        # 배정 목록에서 하나를 빼버림
-                        dropped = assigned.pop(random.randrange(len(assigned)))
-                        # 남은 과목들 중에서 겹치지 않는 새로운 과목을 하나 추가함
-                        remainders = list(set(target_list) - set(assigned) - {dropped})
-                        if remainders:
-                            assigned.append(random.choice(remainders))
-                else:
-                    # 시트에 입력된 과목이 7~8개가 안 될 경우의 에러 처리
-                    requested = ["과목 데이터 부족"] * req_count
-                    assigned = ["과목 데이터 부족"] * req_count
+with st.expander("🛠️ [관리자 전용] 170명 신청 및 배정 만족도 시뮬레이션"):
+    st.info("💡 7개 신청 그룹과 8개 신청 그룹에 대해 각각 170명씩 시뮬레이션을 돌려 배정 성공률을 비교합니다.")
 
-                # 5. 결과 저장 (엑셀의 열이 될 부분)
-                simulated_data.append({
-                    "학번": student_id,
-                    "신청 개수": f"{req_count}개",
-                    "신청한 과목": ", ".join(requested),
-                    "최종 배정된 과목": ", ".join(assigned),
-                    "결과": "🟢 일치" if set(requested) == set(assigned) else "🔴 일부 변경됨 (인원 초과 등)"
-                })
+    # 시뮬레이션 함수 정의 (재사용을 위해)
+    def run_simulation(student_count, req_count, subject_list):
+        data = []
+        total_satisfaction = 0
+        
+        for i in range(student_count):
+            std_id = f"TEST-{req_count}EA-{i+1:03d}"
+            
+            # 1. 신청 (중복 없이 선택)
+            if len(subject_list) >= req_count:
+                requested = random.sample(subject_list, req_count)
+                # 2. 배정 (10% 확률로 과목 변경 발생 가정)
+                assigned = requested.copy()
+                if random.random() < 0.10: # 10% 확률로 1과목 튕김
+                    idx = random.randrange(len(assigned))
+                    dropped = assigned.pop(idx)
+                    remainders = list(set(subject_list) - set(assigned) - {dropped})
+                    if remainders:
+                        assigned.append(random.choice(remainders))
                 
-            # 데이터프레임으로 변환
-            df_simulation = pd.DataFrame(simulated_data)
-            
-            st.success("✅ 170명 데이터 시뮬레이션 완료!")
-            
-            # 화면에 표 출력
-            st.dataframe(df_simulation, use_container_width=True)
-            
-            # 엑셀 다운로드 (한글 깨짐 방지 utf-8-sig)
-            csv = df_simulation.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="📥 엑셀(CSV) 파일로 전체 다운로드",
-                data=csv,
-                file_name='170명_수강신청_및_배정결과_비교.csv',
-                mime='text/csv',
-            )
+                # 3. 만족도 계산 (신청한 것 중 몇 개가 배정되었나)
+                match_count = len(set(requested) & set(assigned))
+                satisfaction = (match_count / req_count) * 100
+                total_satisfaction += satisfaction
+                
+                data.append({
+                    "학번": std_id,
+                    "신청과목": ", ".join(requested),
+                    "배정과목": ", ".join(assigned),
+                    "만족도(%)": round(satisfaction, 1),
+                    "상태": "✅ 완벽" if satisfaction == 100 else "⚠️ 변경됨"
+                })
+            else:
+                data.append({"학번": std_id, "상태": "데이터 부족"})
+        
+        avg_rate = total_satisfaction / student_count
+        return pd.DataFrame(data), avg_rate
+
+    # --- 시뮬레이션 실행 버튼 ---
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("📊 7개 신청 시뮬레이션 (170명)"):
+            df7, rate7 = run_simulation(170, 7, list_11) # 예비 11학년 리스트 기준
+            st.metric("평균 수강 만족도", f"{rate7:.1f}%")
+            st.dataframe(df7, use_container_width=True)
+            csv7 = df7.to_csv(index=False).encode('utf-8-sig')
+            st.download_button("📥 7개 배정결과 다운로드", csv7, "sim_7ea.csv", "text/csv")
+
+    with col2:
+        if st.button("📊 8개 신청 시뮬레이션 (170명)"):
+            df8, rate8 = run_simulation(170, 8, list_12) # 예비 12학년 리스트 기준
+            st.metric("평균 수강 만족도", f"{rate8:.1f}%")
+            st.dataframe(df8, use_container_width=True)
+            csv8 = df8.to_csv(index=False).encode('utf-8-sig')
+            st.download_button("📥 8개 배정결과 다운로드", csv8, "sim_8ea.csv", "text/csv")
