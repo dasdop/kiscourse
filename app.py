@@ -105,35 +105,46 @@ with st.sidebar:
             if st.button("💾 설정 강제 저장"): st.success("설정 반영됨!"); st.rerun()
 
 # 5. 페이지 로직
-# [A] 로그인/회원가입
-if st.session_state.login_email is None:
-    if st.session_state.page == "signup":
-        st.title("📝 KIS 회원가입")
-        with st.container(border=True):
-            se = st.text_input("이메일 (@kis.ac.kr)")
-            sp = st.text_input("비밀번호", type="password")
-            si = st.text_input("학번 (5자리)")
-            sn = st.text_input("이름")
-            if st.button("가입 완료", use_container_width=True):
-                pd.DataFrame([{'이메일':se, '비밀번호':sp, '학번':si, '이름':sn}]).to_csv('users.csv', mode='a', header=not os.path.exists('users.csv'), index=False, encoding='utf-8-sig')
-                st.success("가입 성공!"); st.session_state.page = "login"; st.rerun()
-            if st.button("돌아가기"): st.session_state.page = "login"; st.rerun()
-    else:
-        st.title("🍏 KIS 수강신청 로그인")
-        with st.container(border=True):
-            le = st.text_input("이메일")
-            lp = st.text_input("비밀번호", type="password")
-            if st.button("로그인", type="primary", use_container_width=True):
-                if le == "admin" and lp == "admin123":
-                    st.session_state.update({'login_email':'admin','user_name':'관리자','user_id':'admin','page':'dashboard'}); st.rerun()
-                u_df = get_csv_df('users.csv')
-                if u_df is not None:
-                    user = u_df[(u_df['이메일']==le) & (u_df['비밀번호']==str(lp))]
-                    if not user.empty:
-                        st.session_state.update({'login_email':le, 'user_name':user.iloc[0]['이름'], 'user_id':user.iloc[0]['학번'], 'page':'dashboard'}); st.rerun()
-                    else: st.error("정보 불일치")
-            if st.button("신규 회원가입"): st.session_state.page = "signup"; st.rerun()
-    st.stop()
+# [A] 로그인 화면 로직 수정본
+else:
+    st.title("🍏 KIS 수강신청 로그인")
+    with st.container(border=True):
+        le = st.text_input("이메일").strip()  # 입력값 공백 제거
+        lp = st.text_input("비밀번호", type="password").strip()
+        
+        if st.button("로그인", type="primary", use_container_width=True):
+            # 1. 관리자 계정 체크
+            if le == "admin" and lp == "admin123":
+                st.session_state.update({'login_email':'admin','user_name':'관리자','user_id':'admin','page':'dashboard'})
+                st.rerun()
+            
+            # 2. 일반 학생 체크
+            u_df = get_csv_df('users.csv')
+            if u_df is not None:
+                # 데이터프레임의 모든 값을 문자열로 변환하고 공백 제거 (핵심!)
+                u_df['이메일'] = u_df['이메일'].astype(str).str.strip()
+                u_df['비밀번호'] = u_df['비밀번호'].astype(str).str.strip()
+                
+                # 비교 시작
+                user = u_df[(u_df['이메일'] == le) & (u_df['비밀번호'] == lp)]
+                
+                if not user.empty:
+                    st.session_state.update({
+                        'login_email': le, 
+                        'user_name': str(user.iloc[0]['이름']).strip(), 
+                        'user_id': str(user.iloc[0]['학번']).strip(), 
+                        'page': 'dashboard'
+                    })
+                    st.success(f"{st.session_state.user_name}님, 환영합니다!")
+                    st.rerun()
+                else:
+                    st.error("이메일 또는 비밀번호가 일치하지 않습니다.")
+            else:
+                st.error("등록된 사용자 정보가 없습니다. 먼저 회원가입을 해주세요.")
+        
+        if st.button("신규 회원가입"):
+            st.session_state.page = "signup"
+            st.rerun()
 
 # [B] 메인 대시보드 (버튼 4개)
 if st.session_state.page == "dashboard":
