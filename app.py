@@ -252,7 +252,7 @@ if st.session_state.page == "input":
             else:
                 st.info("💡 **예비 12학년 안내:** 공통과목 1개는 자동 배정됩니다. 본인의 희망 계열(교과)을 선택한 후 **선택과목 8개**를 골라주세요. (계열 우대)")
                 st.subheader("1. 본인의 희망 계열(교과) 선택")
-                my_track = st.selectbox("희망 계열(교과) (배정 1순위 우대)", TRACKS)
+                my_track = st.selectbox("희망 계열(교과) (신청과목중 희망 계열(교과)에 해당하는 과목 우선 선정", TRACKS)
             
             st.subheader(f"{'1' if current_grade==10 else '2'}. {st.session_state.target_semester} 과목 고르기 (반드시 {max_sel}개 선택)")
             
@@ -399,67 +399,74 @@ elif st.session_state.page == "admin" and st.session_state.admin:
                 save_csv(status_df, 'course_status.csv')
                 
                 st.success(f"'{lowest_course}' 과목이 폐강되었습니다."); st.rerun()
+
 import streamlit as st
 import pandas as pd
 import random
 
 st.markdown("---")
-# 🚨 관리자만 열어볼 수 있도록 숨겨두는 탭(Expander)입니다.
-with st.expander("🛠️ [관리자 전용] 170명 수강신청 부하/데이터 테스트"):
-    st.warning("⚠️ 이 버튼을 누르면 170명의 가짜 수강신청 데이터가 즉시 생성됩니다.")
+with st.expander("🛠️ [관리자 전용] 170명 신청 및 배정 결과 시뮬레이션"):
+    st.info("💡 학생이 신청한 과목과 시스템이 최종 배정한 과목을 비교합니다. (블록 시간표 제외)")
     
-    if st.button("🚀 170명 가짜 데이터 생성 및 실험 시작!"):
-        with st.spinner("170명의 데이터를 생성하는 중입니다..."):
+    if st.button("🚀 170명 신청 및 배정 결과 생성!"):
+        with st.spinner("데이터를 생성하는 중입니다..."):
             
-            # 가짜 학생 170명 학번 만들기 (10학년 85명, 11학년 85명 가정)
+            # 1. 170명 학번 세팅 (10학년 85명, 11학년 85명)
             fake_students = []
             for i in range(1, 86):
-                fake_students.append(f"10{i:02d}") # 1001 ~ 1085
-                fake_students.append(f"11{i:02d}") # 1101 ~ 1185
+                fake_students.append(f"10{i:02d}")
+                fake_students.append(f"11{i:02d}")
                 
             simulated_data = []
             
-            # 170명 각각에 대해 랜덤으로 과목을 골라주는 작업
             for student_id in fake_students:
-                # 학번에 따라 11학년 리스트(list_11) 또는 12학년 리스트(list_12) 선택
-                # (이전에 선언해둔 list_11, list_12 변수를 그대로 사용합니다)
+                # 2. 학년에 따른 타겟 리스트와 신청 개수 설정
                 target_list = list_11 if student_id.startswith("10") else list_12
+                req_count = 7 if student_id.startswith("10") else 8
                 
-                # 리스트가 비어있지 않은지 안전 확인
-                if len(target_list) > 0:
-                    # A~H 블록에 들어갈 과목을 리스트에서 랜덤으로 8개 뽑기 (중복 허용)
-                    # 실제 환경과 비슷하게 만들기 위해 '미선택'도 들어갈 수 있게 설정
-                    random_choices = [random.choice(target_list) for _ in range(8)]
-                else:
-                    random_choices = ["데이터 없음"] * 8
+                # 시트의 과목 수가 충분한지 안전 확인
+                if len(target_list) >= req_count:
+                    # 3. [신청] 학생이 원하는 과목을 선택함
+                    requested = random.sample(target_list, req_count)
                     
+                    # 4. [배정] 학교 시스템에서 과목을 확정함
+                    assigned = requested.copy()
+                    
+                    # 시뮬레이션 리얼리티: 10%의 확률로 인기 과목에서 튕겨서 다른 과목으로 배정됨
+                    if random.random() < 0.10: 
+                        # 배정 목록에서 하나를 빼버림
+                        dropped = assigned.pop(random.randrange(len(assigned)))
+                        # 남은 과목들 중에서 겹치지 않는 새로운 과목을 하나 추가함
+                        remainders = list(set(target_list) - set(assigned) - {dropped})
+                        if remainders:
+                            assigned.append(random.choice(remainders))
+                else:
+                    # 시트에 입력된 과목이 7~8개가 안 될 경우의 에러 처리
+                    requested = ["과목 데이터 부족"] * req_count
+                    assigned = ["과목 데이터 부족"] * req_count
+
+                # 5. 결과 저장 (엑셀의 열이 될 부분)
                 simulated_data.append({
                     "학번": student_id,
-                    "A블록": random_choices[0],
-                    "B블록": random_choices[1],
-                    "C블록": random_choices[2],
-                    "D블록": random_choices[3],
-                    "E블록": random_choices[4],
-                    "F블록": random_choices[5],
-                    "G블록": random_choices[6],
-                    "H블록": random_choices[7],
+                    "신청 개수": f"{req_count}개",
+                    "신청한 과목": ", ".join(requested),
+                    "최종 배정된 과목": ", ".join(assigned),
+                    "결과": "🟢 일치" if set(requested) == set(assigned) else "🔴 일부 변경됨 (인원 초과 등)"
                 })
                 
-            # 만든 데이터를 보기 좋은 표(데이터프레임)로 변환
+            # 데이터프레임으로 변환
             df_simulation = pd.DataFrame(simulated_data)
             
-            st.success("✅ 170명 데이터 생성 완료!")
+            st.success("✅ 170명 데이터 시뮬레이션 완료!")
             
-            # 1. 화면에 결과 살짝 보여주기
-            st.write("📊 **생성된 데이터 미리보기 (앞부분 10개만)**")
-            st.dataframe(df_simulation.head(10))
+            # 화면에 표 출력
+            st.dataframe(df_simulation, use_container_width=True)
             
-            # 2. 엑셀(CSV) 파일로 다운로드 할 수 있게 해주기 (가장 안전한 방법)
-            # 구글 시트에 한 번에 170줄을 쏘면 에러가 날 수 있으므로, 엑셀로 먼저 뽑아보는 걸 추천합니다!
-            csv = df_simulation.to_csv(index=False).encode('utf-8')
+            # 엑셀 다운로드 (한글 깨짐 방지 utf-8-sig)
+            csv = df_simulation.to_csv(index=False).encode('utf-8-sig')
             st.download_button(
-                label="📥 엑셀(CSV) 파일로 전체 다운로드 후 확인하기",
+                label="📥 엑셀(CSV) 파일로 전체 다운로드",
                 data=csv,
-                file_name='170명_수강신청_시뮬레이션.csv',
+                file_name='170명_수강신청_및_배정결과_비교.csv',
                 mime='text/csv',
             )
