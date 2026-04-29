@@ -4,10 +4,9 @@ import os
 import random
 from datetime import datetime
 
-# 1. 기본 설정 및 상수
+# 1. 기본 설정 및 시간표 데이터 (최상단 배치로 NameError 방지)
 st.set_page_config(page_title="KIS 수강신청 시스템", layout="wide", page_icon="🍏")
 
-# 시간표 데이터 정의 (NameError 방지)
 GRADE_CONFIG = {
     "11학년": {
         "common": {
@@ -51,134 +50,158 @@ GRADE_CONFIG = {
     }
 }
 
-# 세션 상태 초기화
+SCHOOL_DOMAIN = "kis.ac.kr"
+ID_11 = "1xADYmy5iJEIiaENxCH1ZiqGU2yiFS81MfSQDCMsnO04"
+ID_12 = "1Yp79f79ilwA2ErJ6DoxRPbU_ADCq0PnRGH2TxGvKSDg"
+TRACKS = ['국어과', '영어과', '수학과', '사회과', '과학과', '베트남어과', '예술과', '정보과']
+
+# 2. 세션 상태 및 데이터 로드
 if 'login_email' not in st.session_state:
     st.session_state.update({
         'login_email': None, 'user_name': None, 'user_id': None, 
         'page': 'login', 'app_status': '준비중', 'target_semester': '1학기'
     })
 
-# 데이터 관련 함수
 def get_csv_df(filename):
     if os.path.exists(filename):
-        return pd.read_csv(filename, dtype=str)
+        df = pd.read_csv(filename, dtype=str)
+        return df.apply(lambda x: x.str.strip() if x.dtype == "object" else x)
     return None
 
-# 2. 로그인 및 회원가입 로직 (들여쓰기 오류 수정 지점)
+@st.cache_data(ttl=60)
+def load_full_data():
+    try:
+        url_11 = f"https://docs.google.com/spreadsheets/d/{ID_11}/export?format=csv"
+        url_12 = f"https://docs.google.com/spreadsheets/d/{ID_12}/export?format=csv"
+        def safe_load(url):
+            df = pd.read_csv(url, header=None, dtype=str)
+            idx = 0
+            for i in range(len(df)):
+                row = [str(v).strip() for v in df.iloc[i].values]
+                if '학기' in row and '과목명' in row: idx = i; break
+            df.columns = [str(v).strip() for v in df.iloc[idx].values]
+            return df.iloc[idx + 1:].reset_index(drop=True)
+        return safe_load(url_11), safe_load(url_12)
+    except: return None, None
+
+df_11, df_12 = load_full_data()
+
+# 3. 사이드바 (관리자 메뉴 포함)
+with st.sidebar:
+    st.title("🍏 KIS 메뉴")
+    if st.session_state.login_email:
+        st.info(f"👤 {st.session_state.user_name}님 ({st.session_state.user_id})")
+        if st.button("🏠 메인 대시보드"): st.session_state.page = "dashboard"; st.rerun()
+        if st.session_state.user_id == "admin":
+            st.divider()
+            st.session_state.app_status = st.radio("시스템 단계", ["준비중", "수강신청 진행", "과목거래 오픈"])
+            st.session_state.target_semester = st.selectbox("진행 학기", ["1학기", "2학기"])
+        if st.button("🚪 로그아웃"): st.session_state.clear(); st.rerun()
+
+# 4. 페이지 로직
+# [A] 로그인/회원가입
 if st.session_state.login_email is None:
     if st.session_state.page == "signup":
         st.title("📝 KIS 회원가입")
         with st.container(border=True):
-            se = st.text_input("이메일 (@kis.ac.kr)").strip()
+            se = st.text_input("이메일").strip()
             sp = st.text_input("비밀번호", type="password").strip()
             si = st.text_input("학번 (5자리)").strip()
             sn = st.text_input("이름").strip()
             if st.button("가입 완료", use_container_width=True):
                 if se and sp and si and sn:
-                    new_user = pd.DataFrame([{'이메일':se, '비밀번호':sp, '학번':si, '이름':sn}])
-                    new_user.to_csv('users.csv', mode='a', header=not os.path.exists('users.csv'), index=False, encoding='utf-8-sig')
-                    st.success("가입 성공! 로그인을 진행하세요."); st.session_state.page = "login"; st.rerun()
-                else: st.error("모든 정보를 입력하세요.")
+                    pd.DataFrame([{'이메일':se, '비밀번호':sp, '학번':si, '이름':sn}]).to_csv('users.csv', mode='a', header=not os.path.exists('users.csv'), index=False, encoding='utf-8-sig')
+                    st.success("가입 성공!"); st.session_state.page = "login"; st.rerun()
+                else: st.error("내용을 입력하세요.")
             if st.button("돌아가기"): st.session_state.page = "login"; st.rerun()
     else:
-        st.title("🍏 KIS 수강신청 로그인")
+        st.title("🍏 KIS 로그인")
         with st.container(border=True):
             le = st.text_input("이메일").strip()
             lp = st.text_input("비밀번호", type="password").strip()
             if st.button("로그인", type="primary", use_container_width=True):
                 if le == "admin" and lp == "admin123":
                     st.session_state.update({'login_email':'admin','user_name':'관리자','user_id':'admin','page':'dashboard'}); st.rerun()
-                
                 u_df = get_csv_df('users.csv')
                 if u_df is not None:
-                    # 모든 열 공백 제거 후 비교
-                    u_df = u_df.apply(lambda x: x.str.strip())
                     user = u_df[(u_df['이메일'] == le) & (u_df['비밀번호'] == lp)]
                     if not user.empty:
-                        st.session_state.update({
-                            'login_email': le, 
-                            'user_name': user.iloc[0]['이름'], 
-                            'user_id': str(user.iloc[0]['학번']), 
-                            'page': 'dashboard'
-                        }); st.rerun()
-                    else: st.error("정보 불일치! 이메일이나 비밀번호를 확인하세요.")
-                else: st.error("가입된 정보가 없습니다.")
+                        st.session_state.update({'login_email':le, 'user_name':user.iloc[0]['이름'], 'user_id':str(user.iloc[0]['학번']), 'page':'dashboard'}); st.rerun()
+                    else: st.error("정보 불일치")
             if st.button("신규 회원가입"): st.session_state.page = "signup"; st.rerun()
     st.stop()
 
-# 3. 메인 대시보드 및 결과 페이지
-# --- [사이드바 복구] ---
-with st.sidebar:
-    st.title("🍏 KIS 메뉴")
-    if st.session_state.login_email:
-        st.info(f"👤 {st.session_state.user_name}님 ({st.session_state.user_id})")
-        if st.button("🏠 메인 대시보드"): st.session_state.page = "dashboard"; st.rerun()
-        
-        # 관리자일 때만 보이는 사이드바 리모컨
-        if st.session_state.user_id == "admin":
-            st.divider()
-            st.subheader("⚙️ 시스템 제어")
-            st.session_state.app_status = st.radio("시스템 단계", ["준비중", "수강신청 진행", "과목거래 오픈"])
-            st.session_state.target_semester = st.selectbox("진행 학기", ["1학기", "2학기"])
-            if st.button("💾 설정 저장"): st.success("설정이 반영되었습니다!")
-            
-        if st.button("🚪 로그아웃"): st.session_state.clear(); st.rerun()
-
-# --- [메인 대시보드 버튼 복구] ---
-if st.session_state.page == "dashboard":
-    st.title(f"👋 {st.session_state.user_name}님, 환영합니다!")
-    st.info(f"📢 현재 상태: **{st.session_state.app_status}** | 학기: **{st.session_state.target_semester}**")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        # 일반 기능
+# [B] 메인 대시보드
+elif st.session_state.page == "dashboard":
+    st.title(f"👋 {st.session_state.user_name}님")
+    st.info(f"📢 상태: **{st.session_state.app_status}** | 학기: **{st.session_state.target_semester}**")
+    c1, c2 = st.columns(2)
+    with c1:
         if st.button("📝 수강신청 하기", use_container_width=True):
             if st.session_state.app_status == "수강신청 진행": st.session_state.page = "apply"; st.rerun()
-            else: st.error("지금은 신청 기간이 아닙니다.")
-        if st.button("📊 배정 결과 조회", use_container_width=True): st.session_state.page = "result"; st.rerun()
-        
-    with col2:
-        # 관리자 또는 알림 기능
+            else: st.error("신청 기간이 아닙든.")
+        if st.button("📊 결과/시간표 조회", use_container_width=True): st.session_state.page = "result"; st.rerun()
+    with c2:
         if st.session_state.user_id == "admin":
-            if st.button("🚀 관리자 시스템 (배정/시뮬)", type="primary", use_container_width=True):
-                st.session_state.page = "admin_page"; st.rerun()
+            if st.button("🚀 관리 시스템", type="primary", use_container_width=True): st.session_state.page = "admin_page"; st.rerun()
         else:
-            if st.button("🔔 나의 알림함", use_container_width=True):
-                st.session_state.page = "noti"; st.rerun()
-        
-        if st.button("🤝 과목 거래소", use_container_width=True):
-            if st.session_state.app_status == "과목거래 오픈": st.session_state.page = "trade"; st.rerun()
-            else: st.warning("거래소가 아직 오픈되지 않았습니다.")
+            if st.button("🤝 과목 거래소", use_container_width=True):
+                if st.session_state.app_status == "과목거래 오픈": st.session_state.page = "trade"; st.rerun()
+                else: st.warning("준비 중")
 
-elif st.session_state.page == "result":
-    st.title("📊 나의 확정 시간표")
-    if st.button("⬅️ 메인으로"): st.session_state.page = "dashboard"; st.rerun()
-
+# [C] 수강신청 페이지
+elif st.session_state.page == "apply":
+    st.title("📝 수강신청")
+    if st.button("⬅️ 메인"): st.session_state.page = "dashboard"; st.rerun()
     u_id = str(st.session_state.user_id)
-    target_grade = "12학년" if u_id.startswith("11") else "11학년"
-    grade_cfg = GRADE_CONFIG[target_grade]
+    is_12 = u_id.startswith("11")
+    target_df = df_12 if is_12 else df_11
+    
+    if target_df is not None:
+        sem = st.session_state.target_semester[0]
+        subs = target_df[target_df['학기'].str.contains(sem, na=False)]['과목명'].unique().tolist()
+        with st.form("f"):
+            sel = st.multiselect("과목 선택", subs)
+            tk = st.selectbox("희망 계열", TRACKS)
+            if st.form_submit_button("제출"):
+                new = {'제출시간':datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '학번':u_id, '이름':st.session_state.user_name, '신청과목':",".join(sel), '희망계열':tk}
+                pd.DataFrame([new]).to_csv('students_data.csv', mode='a', header=not os.path.exists('students_data.csv'), index=False, encoding='utf-8-sig')
+                st.success("완료!"); st.session_state.page = "dashboard"; st.rerun()
 
+# [D] 결과 및 시간표
+elif st.session_state.page == "result":
+    st.title("📊 나의 시간표")
+    if st.button("⬅️ 메인"): st.session_state.page = "dashboard"; st.rerun()
+    u_id = str(st.session_state.user_id)
     res_df = get_csv_df('final_results.csv')
     if res_df is not None:
-        # 데이터프레임 공백 제거
-        res_df['학번'] = res_df['학번'].str.strip()
-        my_res = res_df[res_df['학번'] == u_id]
-        if not my_res.empty:
-            confirmed_subs = [s.strip() for s in str(my_res.iloc[0]['확정과목']).split(',')]
+        my = res_df[res_df['학번'] == u_id]
+        if not my.empty:
+            conf = [s.strip() for s in str(my.iloc[0]['확정과목']).split(',')]
+            grade = "12학년" if u_id.startswith("11") else "11학년"
+            cfg = GRADE_CONFIG[grade]
             
-            # 시간표 그리기
             days, periods = ["월", "화", "수", "목", "금"], ["1교시", "2교시", "3교시", "4교시", "5교시", "6교시", "7교시", "8교시"]
             tt = pd.DataFrame(index=periods, columns=days).fillna("")
-            
-            for sub, slots in grade_cfg["common"].items():
-                for d, p in slots: tt.at[p, d] = f"⭐ {sub}"
-            for sub in confirmed_subs:
-                for g_name, g_subs in grade_cfg["groups"].items():
-                    if sub in g_subs:
-                        for d, p in grade_cfg["slots"][g_name]:
-                            if tt.at[p, d] == "": tt.at[p, d] = sub
-            
+            for s, sl in cfg["common"].items():
+                for d, p in sl: tt.at[p, d] = f"⭐ {s}"
+            for s in conf:
+                for gn, gs in cfg["groups"].items():
+                    if s in gs:
+                        for d, p in cfg["slots"][gn]:
+                            if tt.at[p, d] == "": tt.at[p, d] = s
             tt.at["7교시", "금"] = "창체"; tt.at["8교시", "금"] = "창체"
             st.table(tt)
-        else: st.warning("배정 결과가 없습니다.")
-    else: st.info("결과가 발표되지 않았습니다.")
+        else: st.warning("결과 없음")
+    else: st.info("발표 전")
+
+# [E] 관리자 전용
+elif st.session_state.page == "admin_page":
+    st.title("⚙️ 관리 시스템")
+    if st.button("⬅️ 메인"): st.session_state.page = "dashboard"; st.rerun()
+    if st.button("🚀 실제 배정 실행 (데이터 확정)"):
+        if os.path.exists('students_data.csv'):
+            df = pd.read_csv('students_data.csv')
+            df['확정과목'] = df['신청과목']
+            df.to_csv('final_results.csv', index=False, encoding='utf-8-sig')
+            st.success("배정 완료!")
