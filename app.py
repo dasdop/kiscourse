@@ -182,15 +182,13 @@ if st.session_state.login_email is None:
                 if users_df is not None:
                     user = users_df[(users_df['이메일'] == email_input) & (users_df['비밀번호'] == str(pw_input))]
                     if not user.empty:
-                        st.session_state.update({'login_email': user.iloc[0]['이메일'], 'user_name': user.iloc[0]['이름'], 'user_id': str(user.iloc[0]['학번']), 'page': 'input'}); st.rerun()
-                    # 🛠️ 수정된 코드 (변수 선언 추가)
-SCHOOL_DOMAIN = "kis.ac.kr"  # 예시 도메인입니다. 실제 학교 도메인으로 변경하세요.
+        st.session_state.update({'login_email': user.iloc[0]['이메일'], 'user_name': ... }) 
+        # (여기에 로그인 성공 처리 코드가 이어서 있을 겁니다)
+    else: 
+        st.error("등록된 회원이 없거나 비밀번호가 틀렸습니다.")
 
-# 기존 코드
-new_email = st.text_input("학교 이메일", placeholder=f"ID@{SCHOOL_DOMAIN}")
-                    else: st.error("이메일 또는 비밀번호 오류")
-                else: st.error("등록된 회원이 없습니다.")
-            st.divider()
+    st.divider()
+    if st.button("회원가입 하기", use_container_width=True): st.session_state.page = "signup"
             if st.button("회원가입 하기", use_container_width=True): st.session_state.page = "signup"; st.rerun()
 
     elif st.session_state.page == "signup":
