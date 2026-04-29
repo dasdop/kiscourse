@@ -190,24 +190,57 @@ with st.sidebar:
     
     st.divider()
 # ==========================================
-# 🔑 1부: 로그인 / 회원가입
-# ==========================================
-if st.session_state.login_email is None:
-    if st.session_state.page == "login":
-        st.title(f"🍏 KIS {st.session_state.target_semester} 수강신청 로그인")
-        with st.container(border=True):
-            email_input = st.text_input("학교 이메일 (@kshcm.net)")
-            pw_input = st.text_input("비밀번호", type="password")
-            if st.button("로그인", type="primary", use_container_width=True):
-                if email_input == "admin@kshcm.net" and pw_input == "admin":
-                    st.session_state.update({'login_email': email_input, 'user_name': '관리자', 'user_id': '99999', 'admin': True, 'page': 'admin'}); st.rerun()
+# --- 로그인 페이지 로직 ---
+if st.session_state.page == "login":
+    st.title("🍏 KIS 수강신청 로그인")
+    with st.container(border=True):
+        email_input = st.text_input("학교 이메일 (@kshcm.net)")
+        pw_input = st.text_input("비밀번호", type="password")
+        
+        if st.button("로그인", type="primary", use_container_width=True):
+            users_df = get_csv_df('users.csv')
+            if users_df is not None:
+                user = users_df[(users_df['이메일'] == email_input) & (users_df['비밀번호'] == str(pw_input))]
+                if not user.empty:
+                    # ✅ 성공 시 세션 업데이트 및 대시보드로 이동
+                    st.session_state.update({
+                        'login_email': user.iloc[0]['이메일'],
+                        'user_name': user.iloc[0]['이름'],
+                        'user_id': user.iloc[0]['학번'],
+                        'page': 'dashboard'
+                    })
+                    st.rerun()
+                else:
+                    st.error("❌ 이메일 또는 비밀번호가 틀렸습니다.")
+            else:
+                st.error("❌ 등록된 회원이 없습니다. 회원가입을 먼저 해주세요.")
+        
+        if st.button("신규 회원가입 하기"):
+            st.session_state.page = "signup"
+            st.rerun()
+
+# --- 회원가입 페이지 로직 ---
+elif st.session_state.page == "signup":
+    st.title("📝 KIS 수강신청 회원가입")
+    with st.container(border=True):
+        new_email = st.text_input("학교 이메일", placeholder=f"ID@{SCHOOL_DOMAIN}")
+        new_pw = st.text_input("비밀번호 생성", type="password")
+        new_id = st.text_input("학번 (5자리)", placeholder="예: 10101")
+        new_name = st.text_input("본인 이름")
+        
+        if st.button("가입 완료", type="primary", use_container_width=True):
+            if not is_valid_sid_format(new_id):
+                st.error("❌ 올바른 학번 형식이 아닙니다.")
+            else:
+                new_user = pd.DataFrame([{'이메일': new_email, '비밀번호': new_pw, '학번': new_id, '이름': new_name}])
+                new_user.to_csv('users.csv', mode='a', header=not os.path.exists('users.csv'), index=False, encoding='utf-8-sig')
+                st.success("🎉 가입 완료! 로그인 해주세요.")
+                st.session_state.page = "login"
+                st.rerun()
                 
-                users_df = get_csv_df('users.csv')
-                if users_df is not None:
-                    user = users_df[(users_df['이메일'] == email_input) & (users_df['비밀번호'] == str(pw_input))]
-                    if not user.empty:
-                        st.session_state.update({'login_email': user.iloc[0]['이메일'], 'user_name': ... }) 
-        # (여기에 로그인 성공 처리 코드가 이어서 있을 겁니다)
+        if st.button("뒤로 가기"):
+            st.session_state.page = "login"
+            st.rerun()
             
     elif st.session_state.page == "signup":
         st.title("📝 KIS 수강신청 회원가입")
