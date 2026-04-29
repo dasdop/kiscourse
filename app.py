@@ -193,10 +193,10 @@ if st.session_state.login_email is None:
                         st.session_state.update({'login_email': user.iloc[0]['이메일'], 'user_name': ... }) 
         # (여기에 로그인 성공 처리 코드가 이어서 있을 겁니다)
              elif st.session_state.page == "signup":
-            st.subheader("회원가입")
+                 st.subheader("회원가입")
                                                                     
      # 여기서 SCHOOL_DOMAIN을 그대로 사용합니다.
-     new_email = st.text_input("학교 이메일", placeholder=f"ID@{SCHOOL_DOMAIN}") 
+          new_email = st.text_input("학교 이메일", placeholder=f"ID@{SCHOOL_DOMAIN}") 
                             
     # (나머지 회원가입 코드들...)
     elif st.session_state.page == "signup":
