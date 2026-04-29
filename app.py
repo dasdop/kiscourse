@@ -1,3 +1,9 @@
+import os
+
+# [추가할 코드] 에러 방지를 위해 기존 파일 강제 삭제 (한 번 실행 후 지워도 됨)
+if os.path.exists('final_results.csv'): os.remove('final_results.csv')
+if os.path.exists('students_data.csv'): os.remove('students_data.csv')
+if os.path.exists('trade_requests.csv'): os.remove('trade_requests.csv')
 import streamlit as st
 import pandas as pd
 import os
