@@ -23,8 +23,7 @@ ID_12 = "1xADYmy5iJEIiaENxCH1ZiqGU2yiFS81MfSQDCMsnO04"
 
 # ✅ 수정할 코드 (안전장치 추가)
 if 'user_id' not in st.session_state or not st.session_state.user_id:
-    st.warning("⚠️ 접속 정보가 초기화되었습니다. 처음 화면으로 돌아가 다시 로그인해 주세요.")
-    st.stop() # 여기서 앱 실행을 멈춰서 에러를 방지합니다.
+    # 여기서 앱 실행을 멈춰서 에러를 방지합니다.
 
 user_grade_prefix = str(st.session_state.user_id)[:2] # 안전하게 문자로 바꾼 뒤 앞 2자리 자르기
 
