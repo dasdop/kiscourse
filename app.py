@@ -450,7 +450,7 @@ with st.expander("🛠️ [관리자 전용] 170명 신청 및 배정 만족도 
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("📊 7개 신청 시뮬레이션 (170명)"):
+        if st.button("📊 11학년 신청 시뮬레이션 (170명)"):
             df7, rate7 = run_simulation(170, 7, list_11) # 예비 11학년 리스트 기준
             st.metric("평균 수강 만족도", f"{rate7:.1f}%")
             st.dataframe(df7, use_container_width=True)
@@ -458,7 +458,7 @@ with st.expander("🛠️ [관리자 전용] 170명 신청 및 배정 만족도 
             st.download_button("📥 7개 배정결과 다운로드", csv7, "sim_7ea.csv", "text/csv")
 
     with col2:
-        if st.button("📊 8개 신청 시뮬레이션 (170명)"):
+        if st.button("📊 12학년 신청 시뮬레이션 (170명)"):
             df8, rate8 = run_simulation(170, 8, list_12) # 예비 12학년 리스트 기준
             st.metric("평균 수강 만족도", f"{rate8:.1f}%")
             st.dataframe(df8, use_container_width=True)
