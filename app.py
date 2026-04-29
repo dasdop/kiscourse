@@ -131,6 +131,21 @@ elif st.session_state.page == "apply":
             new_data = {'제출시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '학번': st.session_state.user_id, '이름': st.session_state.user_name, '학년': cur_grade, '희망계열': my_track, '신청과목': ",".join(selected)}
             pd.DataFrame([new_data]).to_csv('students_data.csv', mode='a', header=not os.path.exists('students_data.csv'), index=False, encoding='utf-8-sig')
             st.success("신청되었습니다!"); st.session_state.page = "dashboard"; st.rerun()
+
+# [D] 결과 조회 로직 (상세)
+elif st.session_state.page == "result":
+    st.title("📊 배정 결과")
+    if st.button("⬅️ 메인으로"): st.session_state.page = "dashboard"; st.rerun()
+    res_df = get_csv_df('final_results.csv')
+    if res_df is not None:
+        my_res = res_df[res_df['학번'].astype(str) == str(st.session_state.user_id)]
+        if not my_res.empty:
+            st.success(f"✅ 확정: {my_res.iloc[0]['확정과목']}")
+            st.error(f"❌ 탈락: {my_res.iloc[0]['탈락과목']}")
+        else: st.warning("배정 결과가 없습니다.")
+    else: st.info("관리자가 배정을 가동하지 않았습니다.")
+
+# [E] 관리자 전용 배정 시스템
 # 4. 시뮬레이션 함수
 def run_simulation(student_count, req_count, subject_list):
     data = []
@@ -151,23 +166,3 @@ def run_simulation(student_count, req_count, subject_list):
         total_satisfaction += sat
         data.append({"학번": std_id, "만족도(%)": round(sat, 1), "상태": "✅ 완벽" if sat == 100 else "⚠️ 변경됨"})
     return pd.DataFrame(data), total_satisfaction / student_count
-# [D] 결과 조회 로직 (상세)
-elif st.session_state.page == "result":
-    st.title("📊 배정 결과")
-    if st.button("⬅️ 메인으로"): st.session_state.page = "dashboard"; st.rerun()
-    res_df = get_csv_df('final_results.csv')
-    if res_df is not None:
-        my_res = res_df[res_df['학번'].astype(str) == str(st.session_state.user_id)]
-        if not my_res.empty:
-            st.success(f"✅ 확정: {my_res.iloc[0]['확정과목']}")
-            st.error(f"❌ 탈락: {my_res.iloc[0]['탈락과목']}")
-        else: st.warning("배정 결과가 없습니다.")
-    else: st.info("관리자가 배정을 가동하지 않았습니다.")
-
-# [E] 관리자 전용 배정 시스템
-elif st.session_state.page == "admin_page":
-    st.title("⚙️ 관리자 배정 시스템")
-    if st.button("⬅️ 메인으로"): st.session_state.page = "dashboard"; st.rerun()
-    if st.button("🚀 배정 알고리즘 가동 (170명 데이터 처리)"):
-        # 여기에 배정 로직(final_results.csv 생성)이 들어갑니다.
-        st.success("배정이 완료되었습니다!")
