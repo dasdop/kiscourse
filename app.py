@@ -373,3 +373,59 @@ elif st.session_state.page == 'admin':
         st.dataframe(sum_df)
         csv = sum_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
         st.download_button(f"📥 다운로드", csv, f"KIS_Group_{sem}.csv", "text/csv")
+
+# [F] 과목 거래소
+elif st.session_state.page == 'trade':
+    st.title(f"🤝 {st.session_state.selected_semester} 과목 거래소")
+    if st.session_state.app_status != "과목거래 오픈": st.warning("🔒 닫혀있습니다."); st.stop()
+
+    _, result_file, trade_file = get_files()
+    if not os.path.exists(result_file): st.stop()
+    
+    res_df = pd.read_csv(result_file)
+    my_id = str(st.session_state.user_id)
+    my_info = res_df[res_df['학번'].astype(str) == my_id]
+    if my_info.empty: st.stop()
+    
+    my_courses = [c.strip() for c in str(my_info.iloc[0].get('확정과목', '')).split(',') if c.strip()]
+    my_grade = my_info.iloc[0].get('학년', st.session_state.grade)
+    
+    if not os.path.exists(trade_file): pd.DataFrame(columns=['요청ID','발신ID','발신자','수신ID','수신자','줄과목','받을과목','상태']).to_csv(trade_file, index=False)
+    
+    t1, t2 = st.tabs(["전체 현황판", "받은 제안"])
+    with t1:
+        peer_df = res_df[(res_df['학년'] == my_grade) & (res_df['학번'].astype(str) != my_id)] if '학년' in res_df.columns else res_df[res_df['학번'].astype(str) != my_id]
+        for _, row in peer_df.iterrows():
+            with st.container(border=True):
+                c1, c2, c3 = st.columns([2,5,3])
+                p_courses = [c.strip() for c in str(row.get('확정과목', '')).split(',') if c.strip()]
+                with c1: st.write(f"👤 {mask_name(row.get('이름', '알수없음'))}")
+                with c2: st.write(", ".join(p_courses))
+                with c3:
+                    with st.expander("교환 제안"):
+                        give = st.selectbox("줄 과목", my_courses, key=f"g_{row['학번']}")
+                        want = st.selectbox("받을 과목", p_courses, key=f"w_{row['학번']}")
+                        if st.button("제안", key=f"b_{row['학번']}"):
+                            req = {'요청ID': str(uuid.uuid4())[:8], '발신ID': my_id, '발신자': st.session_state.user_name, '수신ID': row['학번'], '수신자': row.get('이름', ''), '줄과목': give, '받을과목': want, '상태': '요청중'}
+                            pd.DataFrame([req]).to_csv(trade_file, mode='a', header=False, index=False, encoding='utf-8-sig')
+                            st.success("전송 완료!"); time.sleep(1); st.rerun()
+    with t2:
+        trade_df = pd.read_csv(trade_file)
+        my_inbox = trade_df[(trade_df['수신ID'].astype(str) == my_id) & (trade_df['상태'] == '요청중')]
+        if my_inbox.empty: st.info("제안이 없습니다.")
+        for _, req in my_inbox.iterrows():
+            with st.container(border=True):
+                st.write(f"🔔 **{mask_name(req['발신자'])}**님: 내 **[{req['받을과목']}]** ↔ 상대 **[{req['줄과목']}]**")
+                if st.button("✅ 수락(즉시반영)", key=f"a_{req['요청ID']}"):
+                    my_courses.remove(req['받을과목']); my_courses.append(req['줄과목'])
+                    res_df.at[my_info.index[0], '확정과목'] = ",".join(my_courses)
+                    s_idx = res_df.index[res_df['학번'].astype(str) == str(req['발신ID'])][0]
+                    s_courses = [c.strip() for c in str(res_df.at[s_idx, '확정과목']).split(',')]
+                    s_courses.remove(req['줄과목']); s_courses.append(req['받을과목'])
+                    res_df.at[s_idx, '확정과목'] = ",".join(s_courses)
+                    
+                    res_df.to_csv(result_file, index=False, encoding='utf-8-sig')
+                    trade_df.loc[trade_df['요청ID'] == req['요청ID'], '상태'] = '완료'
+                    trade_df.to_csv(trade_file, index=False, encoding='utf-8-sig')
+                    st.success("교환 성사!"); time.sleep(1); st.rerun()
+
