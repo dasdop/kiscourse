@@ -206,6 +206,22 @@ with st.sidebar:
         if st.button("🏠 홈으로"): st.session_state.page = "dashboard"; st.rerun()
         if st.button("🚪 로그아웃"): st.session_state.clear(); st.rerun()
 
+# ... 기존 코드 ...
+        if st.button("🏠 홈으로"): st.session_state.page = "dashboard"; st.rerun()
+        if st.button("🚪 로그아웃"): st.session_state.clear(); st.rerun()
+
+    # ==========================================
+    # 🔥 여기에 '코드 보기' 버튼 추가!
+    # ==========================================
+    st.divider()
+    with st.expander("💻 사이트 소스코드 보기"):
+        try:
+            # 현재 실행 중인 파일(__file__)의 전체 코드를 읽어옵니다.
+            with open(__file__, "r", encoding="utf-8") as f:
+                code_text = f.read()
+            st.code(code_text, language="python")
+        except Exception as e:
+            st.error("코드를 불러올 수 없습니다.")
 # ==========================================
 # 5. 페이지 라우팅
 # ==========================================
