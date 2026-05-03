@@ -125,18 +125,20 @@ def load_and_filter_data(semester):
         return dummy_df[dummy_df['학기'] == semester.replace("학기", "")], dummy_df[dummy_df['학기'] == semester.replace("학기", "")]
 
 def highlight_timetable(val):
-    if not val: return ''
-    if val in ['영어 I', '스포츠 문화', '창의적 사고 설계', '창체', '심화 영어', '진로 활동']: 
+    if pd.isna(val) or not val: return ''
+    val_str = str(val)
+    if val_str in ['영어 I', '스포츠 문화', '창의적 사고 설계', '창체', '심화 영어', '진로 활동']: 
         return 'background-color: #f0f2f6; color: black;' 
     for g_name, subjects in GROUP_MAP.items():
-        if val in subjects:
+        if val_str in subjects:
             colors = {"A그룹":"#fff2cc", "B그룹":"#d9ead3", "C그룹":"#c9daf8", "D그룹":"#fce5cd", "E그룹":"#ead1dc", "F그룹":"#b6d7a8"}
             return f'background-color: {colors[g_name]}; color: black;'
-    if "💥충돌" in val: return 'background-color: #ffcccc; color: red; font-weight: bold;'
+    if "💥충돌" in val_str: return 'background-color: #ffcccc; color: red; font-weight: bold;'
     return 'background-color: #ffffff; color: black;'
 
 def draw_styled_dataframe(df):
     styler = df.style
+    # Pandas 버전에 따른 호환성 처리 (Applymap 에러 방지)
     if hasattr(styler, "map"):
         styled_df = styler.map(highlight_timetable)
     else:
@@ -148,8 +150,9 @@ def run_assignment(semester):
     if not os.path.exists(apply_file): return False, f"{semester} 신청 데이터가 없습니다."
 
     df = pd.read_csv(apply_file)
-    df['제출시간'] = pd.to_datetime(df['제출시간'])
-    df = df.sort_values(by=['제출시간'], ascending=[True])
+    if '제출시간' in df.columns:
+        df['제출시간'] = pd.to_datetime(df['제출시간'])
+        df = df.sort_values(by=['제출시간'], ascending=[True])
     
     final_results = []
     course_counts = {}
@@ -183,45 +186,41 @@ def run_assignment(semester):
 with st.sidebar:
     st.title("🍏 KIS PRO")
     if st.session_state.user_id:
-        st.write(f"👤 **{st.session_state.user_name}**님")
+        st.write(f"👤 **{st.session_state.get('user_name', '알수없음')}**님")
         
-        # 관리자 제어판 (모든 학생에게 실시간 적용)
         if st.session_state.user_id == "admin":
             st.divider()
             st.subheader("⚙️ 중앙 통제실")
             
-            sem_idx = ["1학기", "2학기"].index(st.session_state.selected_semester)
-            stat_idx = ["준비중", "수강신청 진행", "과목거래 오픈"].index(st.session_state.app_status)
+            sem_idx = ["1학기", "2학기"].index(st.session_state.selected_semester) if st.session_state.selected_semester in ["1학기", "2학기"] else 0
+            stat_idx = ["준비중", "수강신청 진행", "과목거래 오픈"].index(st.session_state.app_status) if st.session_state.app_status in ["준비중", "수강신청 진행", "과목거래 오픈"] else 0
             
             new_sem = st.selectbox("📅 학기 선택", ["1학기", "2학기"], index=sem_idx)
             new_stat = st.radio("🚦 상태 변경", ["준비중", "수강신청 진행", "과목거래 오픈"], index=stat_idx)
             
-            if st.button("💾 모든 학생에게 즉시 적용", type="primary"):
+            if st.button("💾 모든 학생에게 즉시 적용", type="primary", key="admin_save_btn"):
                 save_settings(new_sem, new_stat)
-                st.success("✅ 중앙 서버에 저장되었습니다! 모든 학생의 화면에 동기화됩니다.")
+                st.success("✅ 저장되었습니다!")
                 time.sleep(1)
                 st.rerun()
             
         st.divider()
-        if st.button("🏠 홈으로"): st.session_state.page = "dashboard"; st.rerun()
-        if st.button("🚪 로그아웃"): st.session_state.clear(); st.rerun()
+        # 고유 키(key)를 추가하여 DuplicateElementId 에러 방지
+        if st.button("🏠 홈으로", key="sidebar_home_btn"): 
+            st.session_state.page = "dashboard"
+            st.rerun()
+        if st.button("🚪 로그아웃", key="sidebar_logout_btn"): 
+            st.session_state.clear()
+            st.rerun()
 
-# ... 기존 코드 ...
-        if st.button("🏠 홈으로"): st.session_state.page = "dashboard"; st.rerun()
-        if st.button("🚪 로그아웃"): st.session_state.clear(); st.rerun()
-
-    # ==========================================
-    # 🔥 여기에 '코드 보기' 버튼 추가!
-    # ==========================================
     st.divider()
-    with st.expander("💻 사이트 소스코드 보기"):
+    with st.expander("💻 소스코드 보기"):
         try:
-            # 현재 실행 중인 파일(__file__)의 전체 코드를 읽어옵니다.
             with open(__file__, "r", encoding="utf-8") as f:
-                code_text = f.read()
-            st.code(code_text, language="python")
-        except Exception as e:
+                st.code(f.read(), language="python")
+        except Exception:
             st.error("코드를 불러올 수 없습니다.")
+
 # ==========================================
 # 5. 페이지 라우팅
 # ==========================================
@@ -232,17 +231,26 @@ if st.session_state.page == 'login':
     uid = st.text_input("학번 (10...: 11학년 / 11...: 12학년 / 관리자: admin)")
     upw = st.text_input("비밀번호", type="password")
     
-    if st.button("로그인"):
-        if uid == "admin" and upw == "admin123":
-            st.session_state.update({'user_id':'admin', 'user_name':'관리자', 'page':'dashboard'}); st.rerun()
-        elif uid.startswith("10") or uid.startswith("11"):
+    if st.button("로그인", key="login_btn"):
+        admin_pw = "admin123" 
+        try:
+            admin_pw = st.secrets.get("admin_password", "admin123")
+        except Exception:
+            pass
+
+        if uid == "admin" and upw == admin_pw:
+            st.session_state.update({'user_id':'admin', 'user_name':'관리자', 'page':'dashboard'})
+            st.rerun()
+        elif (uid.startswith("10") or uid.startswith("11")) and len(uid) > 2:
             gr = "11학년" if uid.startswith("10") else "12학년"
-            st.session_state.update({'user_id':uid, 'user_name':f"학생_{uid}", 'grade':gr, 'page':'dashboard'}); st.rerun()
-        else: st.error("올바른 학번을 입력하세요")
+            st.session_state.update({'user_id':uid, 'user_name':f"학생_{uid}", 'grade':gr, 'page':'dashboard'})
+            st.rerun()
+        else: 
+            st.error("올바른 학번을 입력하세요")
 
 # [B] 대시보드
 elif st.session_state.page == 'dashboard':
-    st.title(f"👋 반갑습니다, {st.session_state.user_name}님")
+    st.title(f"👋 반갑습니다, {st.session_state.get('user_name', '알수없음')}님")
     st.info(f"📍 현재 모드: **{st.session_state.selected_semester}** ({st.session_state.app_status})")
     
     if st.session_state.user_id != "admin" and st.session_state.app_status == "준비중":
@@ -251,27 +259,35 @@ elif st.session_state.page == 'dashboard':
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         is_open = st.session_state.app_status == "수강신청 진행"
-        if st.button("📝 실전 수강신청", use_container_width=True, disabled=not is_open, type="primary" if is_open else "secondary"):
+        if st.button("📝 실전 수강신청", use_container_width=True, disabled=not is_open, type="primary" if is_open else "secondary", key="dash_apply"):
             st.session_state.page = "apply"; st.rerun()
     with c2:
-        if st.button("📊 결과/시간표", use_container_width=True): st.session_state.page = "result"; st.rerun()
+        if st.button("📊 결과/시간표", use_container_width=True, key="dash_result"): 
+            st.session_state.page = "result"; st.rerun()
     with c3:
-        if st.button("🤝 과목 거래소", use_container_width=True): st.session_state.page = "trade"; st.rerun()
+        if st.button("🤝 과목 거래소", use_container_width=True, key="dash_trade"): 
+            st.session_state.page = "trade"; st.rerun()
     with c4:
-        if st.button("🎮 시뮬레이션", use_container_width=True): st.session_state.page = "simulation"; st.rerun()
+        if st.button("🎮 시뮬레이션", use_container_width=True, key="dash_sim"): 
+            st.session_state.page = "simulation"; st.rerun()
         
     if st.session_state.user_id == "admin":
         st.divider()
-        if st.button("⚙️ 관리자 전용 데이터 관리", type="primary"): st.session_state.page = "admin"; st.rerun()
+        if st.button("⚙️ 관리자 전용 데이터 관리", type="primary", key="dash_admin"): 
+            st.session_state.page = "admin"; st.rerun()
 
 # [C] 정규 수강신청 폼
 elif st.session_state.page == 'apply':
     st.title(f"📝 {st.session_state.selected_semester} 실전 수강신청")
-    if st.session_state.app_status != "수강신청 진행": st.warning("기간이 아닙니다."); st.stop()
-        
-    req_count = 7 if st.session_state.get('grade', '11학년') == "11학년" else 8
+    if st.session_state.app_status != "수강신청 진행": 
+        st.warning("기간이 아닙니다."); st.stop()
+    
+    # get()을 사용하여 AttributeError 방지
+    gr = st.session_state.get('grade', '11학년')
+    req_count = 7 if gr == "11학년" else 8
+    
     df_11, df_12 = load_and_filter_data(st.session_state.selected_semester)
-    target_list = df_11 if st.session_state.get('grade', '11학년') == "11학년" else df_12
+    target_list = df_11 if gr == "11학년" else df_12
     available = target_list['과목명'].dropna().unique().tolist() if '과목명' in target_list.columns else []
     
     with st.form("apply_form"):
@@ -279,14 +295,15 @@ elif st.session_state.page == 'apply':
         track = st.selectbox("희망 계열", TRACKS)
         
         if st.form_submit_button("신청서 제출"):
-            if len(selected) != req_count: st.error(f"❌ 정확히 {req_count}개를 골라주세요!")
+            if len(selected) != req_count: 
+                st.error(f"❌ 정확히 {req_count}개를 골라주세요!")
             else:
                 apply_file, _, _ = get_files()
                 new_data = {
                     '학기': st.session_state.selected_semester,
                     '제출시간': datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
-                    '학번': st.session_state.user_id, '이름': st.session_state.user_name,
-                    '학년': st.session_state.get('grade', '미상'), '희망계열': track, '신청과목': ",".join(selected)
+                    '학번': st.session_state.user_id, '이름': st.session_state.get('user_name', ''),
+                    '학년': gr, '희망계열': track, '신청과목': ",".join(selected)
                 }
                 pd.DataFrame([new_data]).to_csv(apply_file, mode='a', header=not os.path.exists(apply_file), index=False, encoding='utf-8-sig')
                 st.success("✅ 제출 완료!"); time.sleep(1); st.session_state.page = "dashboard"; st.rerun()
@@ -303,7 +320,7 @@ elif st.session_state.page == 'simulation':
     
     sim_selected = st.multiselect(f"과목을 담아보세요 (최대 {req_count}개)", available, max_selections=req_count)
     
-    if st.button("시간표 그리기"):
+    if st.button("시간표 그리기", key="sim_draw_btn"):
         days = ["월", "화", "수", "목", "금"]
         periods = [f"{i}교시" for i in range(1, 9)]
         timetable = pd.DataFrame("", index=periods, columns=days)
@@ -341,47 +358,54 @@ elif st.session_state.page == 'result':
     
     if os.path.exists(result_file):
         res_df = pd.read_csv(result_file)
-        my_res = res_df[res_df['학번'].astype(str) == str(st.session_state.user_id)]
-        
-        if not my_res.empty:
-            my_confirmed = str(my_res.iloc[0].get('확정과목', ''))
-            my_grade = my_res.iloc[0].get('학년', st.session_state.get('grade', '11학년'))
-            st.success(f"✅ 배정 과목: {my_confirmed}")
+        if '학번' in res_df.columns:
+            my_res = res_df[res_df['학번'].astype(str) == str(st.session_state.user_id)]
             
-            days = ["월", "화", "수", "목", "금"]
-            periods = [f"{i}교시" for i in range(1, 9)]
-            timetable = pd.DataFrame("", index=periods, columns=days)
-            timetable.at["7교시", "금"] = "창체"
-            timetable.at["8교시", "금"] = "창체"
-            
-            common = ["영어 I", "스포츠 문화", "창의적 사고 설계"] if my_grade == "11학년" else ["심화 영어", "진로 활동"]
-            my_courses = [c.strip() for c in my_confirmed.split(',') if c.strip()] + common
-            
-            for c in my_courses:
-                for master_key in MASTER_TIMETABLE.keys():
-                    if master_key in c or c in master_key:
-                        for day, p in MASTER_TIMETABLE[master_key]:
-                            if not (day == "금" and p in ["7교시", "8교시"]): 
-                                timetable.at[p, day] = master_key
-                        break
-                            
-            draw_styled_dataframe(timetable)
-            
-            rejected = str(my_res.iloc[0].get('탈락과목', ''))
-            if rejected and rejected != 'nan': st.error(f"❌ 탈락(대기): {rejected}")
-        else: st.warning("배정 내역이 없습니다.")
+            if not my_res.empty:
+                my_confirmed = str(my_res.iloc[0].get('확정과목', ''))
+                # get() 사용하여 KeyError 방지
+                my_grade = my_res.iloc[0].get('학년', st.session_state.get('grade', '11학년'))
+                st.success(f"✅ 배정 과목: {my_confirmed}")
+                
+                days = ["월", "화", "수", "목", "금"]
+                periods = [f"{i}교시" for i in range(1, 9)]
+                timetable = pd.DataFrame("", index=periods, columns=days)
+                timetable.at["7교시", "금"] = "창체"
+                timetable.at["8교시", "금"] = "창체"
+                
+                common = ["영어 I", "스포츠 문화", "창의적 사고 설계"] if my_grade == "11학년" else ["심화 영어", "진로 활동"]
+                my_courses = [c.strip() for c in my_confirmed.split(',') if c.strip()] + common
+                
+                for c in my_courses:
+                    for master_key in MASTER_TIMETABLE.keys():
+                        if master_key in c or c in master_key:
+                            for day, p in MASTER_TIMETABLE[master_key]:
+                                if not (day == "금" and p in ["7교시", "8교시"]): 
+                                    timetable.at[p, day] = master_key
+                            break
+                                
+                draw_styled_dataframe(timetable)
+                
+                rejected = str(my_res.iloc[0].get('탈락과목', ''))
+                if rejected and rejected != 'nan': st.error(f"❌ 탈락(대기): {rejected}")
+            else: st.warning("배정 내역이 없습니다.")
+        else: st.warning("아직 배정 데이터에 학번 정보가 없습니다.")
     else: st.info("아직 배정이 진행되지 않았습니다.")
 
-# [F] 과목 거래소 (🔥 숨겨뒀던 코드 전격 부활!)
+# [F] 과목 거래소
 elif st.session_state.page == 'trade':
     st.title(f"🤝 {st.session_state.selected_semester} 과목 거래소")
-    if st.session_state.app_status != "과목거래 오픈": st.warning("🔒 닫혀있습니다."); st.stop()
+    if st.session_state.app_status != "과목거래 오픈": 
+        st.warning("🔒 닫혀있습니다."); st.stop()
 
     _, result_file, trade_file = get_files()
     if not os.path.exists(result_file): 
         st.warning("먼저 수강신청 배정이 완료되어야 합니다."); st.stop()
     
     res_df = pd.read_csv(result_file)
+    if '학번' not in res_df.columns:
+        st.error("데이터 형식이 올바르지 않습니다."); st.stop()
+
     my_id = str(st.session_state.user_id)
     my_info = res_df[res_df['학번'].astype(str) == my_id]
     if my_info.empty: 
@@ -395,7 +419,6 @@ elif st.session_state.page == 'trade':
     
     t1, t2 = st.tabs(["전체 현황판", "받은 제안"])
     with t1:
-        # 같은 학년 친구들 목록만 불러오기 (에러 방지 처리 완료)
         if '학년' in res_df.columns:
             peer_df = res_df[(res_df['학년'] == my_grade) & (res_df['학번'].astype(str) != my_id)]
         else:
@@ -409,13 +432,13 @@ elif st.session_state.page == 'trade':
                 with c2: st.write(", ".join(p_courses))
                 with c3:
                     with st.expander("교환 제안"):
-                        give = st.selectbox("내어줄 과목", my_courses, key=f"g_{row['학번']}")
-                        want = st.selectbox("받고싶은 과목", p_courses, key=f"w_{row['학번']}")
-                        if st.button("제안 보내기", key=f"b_{row['학번']}"):
+                        give = st.selectbox("내어줄 과목", my_courses, key=f"g_{row.get('학번', uuid.uuid4())}")
+                        want = st.selectbox("받고싶은 과목", p_courses, key=f"w_{row.get('학번', uuid.uuid4())}")
+                        if st.button("제안 보내기", key=f"b_{row.get('학번', uuid.uuid4())}"):
                             req = {
                                 '요청ID': str(uuid.uuid4())[:8], 
                                 '발신ID': my_id, 
-                                '발신자': st.session_state.user_name, 
+                                '발신자': st.session_state.get('user_name', ''), 
                                 '수신ID': row.get('학번',''), 
                                 '수신자': row.get('이름', ''), 
                                 '줄과목': give, 
@@ -426,42 +449,46 @@ elif st.session_state.page == 'trade':
                             st.success("요청이 전송되었습니다!"); time.sleep(1); st.rerun()
     with t2:
         trade_df = pd.read_csv(trade_file)
-        my_inbox = trade_df[(trade_df['수신ID'].astype(str) == my_id) & (trade_df['상태'] == '요청중')]
-        
-        if my_inbox.empty: 
-            st.info("아직 도착한 제안이 없습니다.")
+        if '수신ID' in trade_df.columns and '상태' in trade_df.columns:
+            my_inbox = trade_df[(trade_df['수신ID'].astype(str) == my_id) & (trade_df['상태'] == '요청중')]
+            
+            if my_inbox.empty: 
+                st.info("아직 도착한 제안이 없습니다.")
+            else:
+                for _, req in my_inbox.iterrows():
+                    with st.container(border=True):
+                        st.write(f"🔔 **{mask_name(req.get('발신자',''))}**님의 제안: 내 **[{req.get('받을과목','')}]** ↔ 상대의 **[{req.get('줄과목','')}]**")
+                        if st.button("✅ 수락하기", key=f"a_{req.get('요청ID', uuid.uuid4())}"):
+                            if req['받을과목'] in my_courses: my_courses.remove(req['받을과목'])
+                            my_courses.append(req['줄과목'])
+                            res_df.at[my_info.index[0], '확정과목'] = ",".join(my_courses)
+                            
+                            try:
+                                s_idx = res_df.index[res_df['학번'].astype(str) == str(req['발신ID'])][0]
+                                s_courses = [c.strip() for c in str(res_df.at[s_idx, '확정과목']).split(',')]
+                                if req['줄과목'] in s_courses: s_courses.remove(req['줄과목'])
+                                s_courses.append(req['받을과목'])
+                                res_df.at[s_idx, '확정과목'] = ",".join(s_courses)
+                            except IndexError:
+                                pass
+                                
+                            res_df.to_csv(result_file, index=False, encoding='utf-8-sig')
+                            trade_df.loc[trade_df['요청ID'] == req['요청ID'], '상태'] = '완료'
+                            trade_df.to_csv(trade_file, index=False, encoding='utf-8-sig')
+                            
+                            st.success("거래가 성사되었습니다!"); time.sleep(1.5); st.rerun()
         else:
-            for _, req in my_inbox.iterrows():
-                with st.container(border=True):
-                    st.write(f"🔔 **{mask_name(req['발신자'])}**님의 제안: 내 **[{req['받을과목']}]** ↔ 상대의 **[{req['줄과목']}]**")
-                    if st.button("✅ 수락하기 (즉시 내 시간표 반영)", key=f"a_{req['요청ID']}"):
-                        # 내 과목 변경
-                        if req['받을과목'] in my_courses: my_courses.remove(req['받을과목'])
-                        my_courses.append(req['줄과목'])
-                        res_df.at[my_info.index[0], '확정과목'] = ",".join(my_courses)
-                        
-                        # 상대 과목 변경
-                        s_idx = res_df.index[res_df['학번'].astype(str) == str(req['발신ID'])][0]
-                        s_courses = [c.strip() for c in str(res_df.at[s_idx, '확정과목']).split(',')]
-                        if req['줄과목'] in s_courses: s_courses.remove(req['줄과목'])
-                        s_courses.append(req['받을과목'])
-                        res_df.at[s_idx, '확정과목'] = ",".join(s_courses)
-                        
-                        # 변경사항 저장
-                        res_df.to_csv(result_file, index=False, encoding='utf-8-sig')
-                        trade_df.loc[trade_df['요청ID'] == req['요청ID'], '상태'] = '완료'
-                        trade_df.to_csv(trade_file, index=False, encoding='utf-8-sig')
-                        
-                        st.success("거래가 성사되었습니다! 시간표 탭에서 확인하세요."); time.sleep(1.5); st.rerun()
+            st.info("거래 데이터가 아직 없습니다.")
 
 # [G] 관리자 전용 데이터 추출
 elif st.session_state.page == 'admin':
-    if st.session_state.user_id != "admin": st.error("🚨 권한 없음"); st.stop()
+    if st.session_state.user_id != "admin": 
+        st.error("🚨 권한 없음"); st.stop()
         
     st.title("⚙️ 관리자 전용 데이터 관리")
     sem = st.session_state.selected_semester
     
-    if st.button(f"🔥 {sem} 선착순 정규 배정 실행", type="primary"):
+    if st.button(f"🔥 {sem} 선착순 정규 배정 실행", type="primary", key="admin_run_btn"):
         suc, msg = run_assignment(sem)
         if suc: st.success(msg) 
         else: st.error(msg)
@@ -478,9 +505,10 @@ elif st.session_state.page == 'admin':
                 if '확정과목' in res_df.columns:
                     matched = res_df[res_df['확정과목'].str.contains(sub, na=False)]
                     for _, r in matched.iterrows():
-                        all_data.append([g_name, sub, r.get('학번', ''), r.get('이름', ''), r.get('학년', '미상')])
+                        # KeyError 방지를 위해 get() 사용
+                        all_data.append([g_name, sub, r.get('학번', '미상'), r.get('이름', '미상'), r.get('학년', '미상')])
                         
         sum_df = pd.DataFrame(all_data, columns=["그룹", "과목명", "학번", "이름", "학년"])
         st.dataframe(sum_df)
         csv = sum_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-        st.download_button(f"📥 다운로드", csv, f"KIS_Group_{sem}.csv", "text/csv")
+        st.download_button(f"📥 다운로드", csv, f"KIS_Group_{sem}.csv", "text/csv", key="admin_dl_btn")
