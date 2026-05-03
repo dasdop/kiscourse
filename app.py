@@ -340,7 +340,7 @@ elif st.session_state.page == 'result':
 elif st.session_state.page == 'trade':
     st.title("🤝 과목 거래소")
     if st.session_state.app_status != "과목거래 오픈": st.warning("🔒 닫혀있습니다."); st.stop()
-    st.info("거래소 기능은 생략되었습니다. (이전 코드와 동일하므로 필요시 추가 복사)")
+    
 
 # [G] 관리자 전용 데이터 관리 (오류 1, 3 방어)
 elif st.session_state.page == 'admin':
