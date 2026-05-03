@@ -3,10 +3,11 @@ import pandas as pd
 import os
 import time
 import uuid
+import json
 from datetime import datetime
 
 # ==========================================
-# 1. 기본 설정 및 데이터 (오타 방지용 별칭 추가)
+# 1. 기본 설정 및 데이터
 # ==========================================
 st.set_page_config(page_title="KIS 수강신청 시스템", layout="wide", page_icon="🍏")
 
@@ -36,7 +37,7 @@ MASTER_TIMETABLE = {
     "정보": [("월", "4교시"), ("화", "2교시"), ("수", "5교시"), ("금", "1교시")],
     
     "프레젠테이션 화법": [("화", "3교시"), ("수", "3교시"), ("목", "5교시"), ("금", "6교시")],
-    "프리젠테이션 화법": [("화", "3교시"), ("수", "3교시"), ("목", "5교시"), ("금", "6교시")], # 오타 대비
+    "프리젠테이션 화법": [("화", "3교시"), ("수", "3교시"), ("목", "5교시"), ("금", "6교시")], 
     "글로벌 이슈 글쓰기": [("월", "6교시"), ("화", "5교시"), ("수", "4교시"), ("금", "3교시")],
     "영어 발표와 토론": [("화", "1교시"), ("금", "2교시"), ("월", "7교시"), ("목", "7교시")],
     "Contemporary Literature": [("수", "1교시"), ("화", "6교시"), ("목", "4교시"), ("금", "4교시")],
@@ -55,19 +56,32 @@ ID_11 = "1xADYmy5iJEIiaENxCH1ZiqGU2yiFS81MfSQDCMsnO04"
 ID_12 = "1Yp79f79ilwA2ErJ6DoxRPbU_ADCq0PnRGH2TxGvKSDg"
 
 # ==========================================
-# 2. 세션 상태 초기화 및 보호 (오류 1 방어)
+# 2. 시스템 중앙 설정 (모든 학생 동기화)
 # ==========================================
+SETTINGS_FILE = "system_settings.json"
+
+def load_settings():
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"semester": "1학기", "status": "준비중"}
+
+def save_settings(sem, stat):
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump({"semester": sem, "status": stat}, f)
+
+sys_settings = load_settings()
+st.session_state.selected_semester = sys_settings['semester']
+st.session_state.app_status = sys_settings['status']
+
 if 'page' not in st.session_state: st.session_state.page = 'login'
 if 'user_id' not in st.session_state: st.session_state.user_id = None
-if 'app_status' not in st.session_state: st.session_state.app_status = '준비중'
-if 'selected_semester' not in st.session_state: st.session_state.selected_semester = '1학기'
 
-# 로그인 풀림 방지 로직 (강제 로그인 창 이동)
+# 로그인 풀림 방지
 if st.session_state.page != 'login' and st.session_state.user_id is None:
     st.session_state.page = 'login'
     st.rerun()
 
-# 학생인데 grade가 날아간 경우 방어
 if st.session_state.user_id and st.session_state.user_id != "admin" and 'grade' not in st.session_state:
     st.session_state.page = 'login'
     st.session_state.user_id = None
@@ -88,7 +102,6 @@ def get_files():
 
 @st.cache_data(ttl=60)
 def load_and_filter_data(semester):
-    # 구글 시트 에러(오류 4) 방어용 기본 데이터
     dummy_df = pd.DataFrame({
         "학기": ["1"]*12 + ["2"]*12,
         "과목명": ["물리학", "생명과학", "토론과 글쓰기", "미적분 I", "대수", "화학", "심화 국어", "경제", "미적분 II", "화학 II", "세계 지리", "정보"] * 2
@@ -97,7 +110,7 @@ def load_and_filter_data(semester):
         def process(url, sem):
             df = pd.read_csv(url, dtype=str)
             df.columns = df.columns.str.strip()
-            if '과목명' not in df.columns: return None # 열 이름이 틀린 경우
+            if '과목명' not in df.columns: return None 
             if '학기' in df.columns: 
                 df = df[df['학기'].str.contains(sem.replace("학기", ""), na=False)]
             return df.reset_index(drop=True)
@@ -122,13 +135,11 @@ def highlight_timetable(val):
     if "💥충돌" in val: return 'background-color: #ffcccc; color: red; font-weight: bold;'
     return 'background-color: #ffffff; color: black;'
 
-# Pandas 버전 업데이트 에러(오류 2) 완전 해결 함수
 def draw_styled_dataframe(df):
     styler = df.style
     if hasattr(styler, "map"):
         styled_df = styler.map(highlight_timetable)
     else:
-        # 구버전 파이썬을 위한 예비책 (최근 Streamlit에서는 map 사용)
         styled_df = styler.applymap(highlight_timetable)
     st.dataframe(styled_df, use_container_width=True)
 
@@ -173,12 +184,23 @@ with st.sidebar:
     st.title("🍏 KIS PRO")
     if st.session_state.user_id:
         st.write(f"👤 **{st.session_state.user_name}**님")
+        
+        # 관리자 제어판 (모든 학생에게 실시간 적용)
         if st.session_state.user_id == "admin":
             st.divider()
-            st.subheader("⚙️ 관리자 제어판")
-            st.session_state.selected_semester = st.selectbox("📅 진행 학기 선택", ["1학기", "2학기"])
-            st.session_state.app_status = st.radio("🚦 시스템 상태", ["준비중", "수강신청 진행", "과목거래 오픈"])
-            st.success(f"현재 설정: {st.session_state.selected_semester} / {st.session_state.app_status}")
+            st.subheader("⚙️ 중앙 통제실")
+            
+            sem_idx = ["1학기", "2학기"].index(st.session_state.selected_semester)
+            stat_idx = ["준비중", "수강신청 진행", "과목거래 오픈"].index(st.session_state.app_status)
+            
+            new_sem = st.selectbox("📅 학기 선택", ["1학기", "2학기"], index=sem_idx)
+            new_stat = st.radio("🚦 상태 변경", ["준비중", "수강신청 진행", "과목거래 오픈"], index=stat_idx)
+            
+            if st.button("💾 모든 학생에게 즉시 적용", type="primary"):
+                save_settings(new_sem, new_stat)
+                st.success("✅ 중앙 서버에 저장되었습니다! 모든 학생의 화면에 동기화됩니다.")
+                time.sleep(1)
+                st.rerun()
             
         st.divider()
         if st.button("🏠 홈으로"): st.session_state.page = "dashboard"; st.rerun()
@@ -280,7 +302,6 @@ elif st.session_state.page == 'simulation':
         for c in all_sim_courses:
             match_found = False
             for master_key in MASTER_TIMETABLE.keys():
-                # 부분 일치로 인식 강화 (Comprehensive English III -> Comprehensive English 매칭)
                 if master_key in c or c in master_key:
                     for day, p in MASTER_TIMETABLE[master_key]:
                         if not (day == "금" and p in ["7교시", "8교시"]): 
@@ -297,7 +318,7 @@ elif st.session_state.page == 'simulation':
             
         draw_styled_dataframe(timetable)
 
-# [E] 결과 확인 및 시간표 (오류 3 방어)
+# [E] 결과 확인 및 시간표
 elif st.session_state.page == 'result':
     st.title(f"📊 {st.session_state.selected_semester} 시간표")
     _, result_file, _ = get_files()
@@ -308,7 +329,6 @@ elif st.session_state.page == 'result':
         
         if not my_res.empty:
             my_confirmed = str(my_res.iloc[0].get('확정과목', ''))
-            # get()을 사용하여 '학년' 열이 없어도 에러가 나지 않도록 처리
             my_grade = my_res.iloc[0].get('학년', st.session_state.get('grade', '11학년'))
             st.success(f"✅ 배정 과목: {my_confirmed}")
             
@@ -336,20 +356,96 @@ elif st.session_state.page == 'result':
         else: st.warning("배정 내역이 없습니다.")
     else: st.info("아직 배정이 진행되지 않았습니다.")
 
-# [F] 과목 거래소
+# [F] 과목 거래소 (🔥 숨겨뒀던 코드 전격 부활!)
 elif st.session_state.page == 'trade':
-    st.title("🤝 과목 거래소")
+    st.title(f"🤝 {st.session_state.selected_semester} 과목 거래소")
     if st.session_state.app_status != "과목거래 오픈": st.warning("🔒 닫혀있습니다."); st.stop()
-    
 
-# [G] 관리자 전용 데이터 관리 (오류 1, 3 방어)
+    _, result_file, trade_file = get_files()
+    if not os.path.exists(result_file): 
+        st.warning("먼저 수강신청 배정이 완료되어야 합니다."); st.stop()
+    
+    res_df = pd.read_csv(result_file)
+    my_id = str(st.session_state.user_id)
+    my_info = res_df[res_df['학번'].astype(str) == my_id]
+    if my_info.empty: 
+        st.warning("배정 내역이 없어 거래를 할 수 없습니다."); st.stop()
+    
+    my_courses = [c.strip() for c in str(my_info.iloc[0].get('확정과목', '')).split(',') if c.strip()]
+    my_grade = my_info.iloc[0].get('학년', st.session_state.get('grade', '11학년'))
+    
+    if not os.path.exists(trade_file): 
+        pd.DataFrame(columns=['요청ID','발신ID','발신자','수신ID','수신자','줄과목','받을과목','상태']).to_csv(trade_file, index=False)
+    
+    t1, t2 = st.tabs(["전체 현황판", "받은 제안"])
+    with t1:
+        # 같은 학년 친구들 목록만 불러오기 (에러 방지 처리 완료)
+        if '학년' in res_df.columns:
+            peer_df = res_df[(res_df['학년'] == my_grade) & (res_df['학번'].astype(str) != my_id)]
+        else:
+            peer_df = res_df[res_df['학번'].astype(str) != my_id]
+
+        for _, row in peer_df.iterrows():
+            with st.container(border=True):
+                c1, c2, c3 = st.columns([2,5,3])
+                p_courses = [c.strip() for c in str(row.get('확정과목', '')).split(',') if c.strip()]
+                with c1: st.write(f"👤 {mask_name(row.get('이름', '알수없음'))}")
+                with c2: st.write(", ".join(p_courses))
+                with c3:
+                    with st.expander("교환 제안"):
+                        give = st.selectbox("내어줄 과목", my_courses, key=f"g_{row['학번']}")
+                        want = st.selectbox("받고싶은 과목", p_courses, key=f"w_{row['학번']}")
+                        if st.button("제안 보내기", key=f"b_{row['학번']}"):
+                            req = {
+                                '요청ID': str(uuid.uuid4())[:8], 
+                                '발신ID': my_id, 
+                                '발신자': st.session_state.user_name, 
+                                '수신ID': row.get('학번',''), 
+                                '수신자': row.get('이름', ''), 
+                                '줄과목': give, 
+                                '받을과목': want, 
+                                '상태': '요청중'
+                            }
+                            pd.DataFrame([req]).to_csv(trade_file, mode='a', header=False, index=False, encoding='utf-8-sig')
+                            st.success("요청이 전송되었습니다!"); time.sleep(1); st.rerun()
+    with t2:
+        trade_df = pd.read_csv(trade_file)
+        my_inbox = trade_df[(trade_df['수신ID'].astype(str) == my_id) & (trade_df['상태'] == '요청중')]
+        
+        if my_inbox.empty: 
+            st.info("아직 도착한 제안이 없습니다.")
+        else:
+            for _, req in my_inbox.iterrows():
+                with st.container(border=True):
+                    st.write(f"🔔 **{mask_name(req['발신자'])}**님의 제안: 내 **[{req['받을과목']}]** ↔ 상대의 **[{req['줄과목']}]**")
+                    if st.button("✅ 수락하기 (즉시 내 시간표 반영)", key=f"a_{req['요청ID']}"):
+                        # 내 과목 변경
+                        if req['받을과목'] in my_courses: my_courses.remove(req['받을과목'])
+                        my_courses.append(req['줄과목'])
+                        res_df.at[my_info.index[0], '확정과목'] = ",".join(my_courses)
+                        
+                        # 상대 과목 변경
+                        s_idx = res_df.index[res_df['학번'].astype(str) == str(req['발신ID'])][0]
+                        s_courses = [c.strip() for c in str(res_df.at[s_idx, '확정과목']).split(',')]
+                        if req['줄과목'] in s_courses: s_courses.remove(req['줄과목'])
+                        s_courses.append(req['받을과목'])
+                        res_df.at[s_idx, '확정과목'] = ",".join(s_courses)
+                        
+                        # 변경사항 저장
+                        res_df.to_csv(result_file, index=False, encoding='utf-8-sig')
+                        trade_df.loc[trade_df['요청ID'] == req['요청ID'], '상태'] = '완료'
+                        trade_df.to_csv(trade_file, index=False, encoding='utf-8-sig')
+                        
+                        st.success("거래가 성사되었습니다! 시간표 탭에서 확인하세요."); time.sleep(1.5); st.rerun()
+
+# [G] 관리자 전용 데이터 추출
 elif st.session_state.page == 'admin':
     if st.session_state.user_id != "admin": st.error("🚨 권한 없음"); st.stop()
         
-    st.title("⚙️ 관리자 전용 제어")
+    st.title("⚙️ 관리자 전용 데이터 관리")
     sem = st.session_state.selected_semester
     
-    if st.button(f"🔥 {sem} 배정 실행", type="primary"):
+    if st.button(f"🔥 {sem} 선착순 정규 배정 실행", type="primary"):
         suc, msg = run_assignment(sem)
         if suc: st.success(msg) 
         else: st.error(msg)
@@ -366,66 +462,9 @@ elif st.session_state.page == 'admin':
                 if '확정과목' in res_df.columns:
                     matched = res_df[res_df['확정과목'].str.contains(sub, na=False)]
                     for _, r in matched.iterrows():
-                        # get()을 사용하여 '학년' 열 누락으로 인한 에러 원천 차단
                         all_data.append([g_name, sub, r.get('학번', ''), r.get('이름', ''), r.get('학년', '미상')])
                         
         sum_df = pd.DataFrame(all_data, columns=["그룹", "과목명", "학번", "이름", "학년"])
         st.dataframe(sum_df)
         csv = sum_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
         st.download_button(f"📥 다운로드", csv, f"KIS_Group_{sem}.csv", "text/csv")
-
-# [F] 과목 거래소
-elif st.session_state.page == 'trade':
-    st.title(f"🤝 {st.session_state.selected_semester} 과목 거래소")
-    if st.session_state.app_status != "과목거래 오픈": st.warning("🔒 닫혀있습니다."); st.stop()
-
-    _, result_file, trade_file = get_files()
-    if not os.path.exists(result_file): st.stop()
-    
-    res_df = pd.read_csv(result_file)
-    my_id = str(st.session_state.user_id)
-    my_info = res_df[res_df['학번'].astype(str) == my_id]
-    if my_info.empty: st.stop()
-    
-    my_courses = [c.strip() for c in str(my_info.iloc[0].get('확정과목', '')).split(',') if c.strip()]
-    my_grade = my_info.iloc[0].get('학년', st.session_state.grade)
-    
-    if not os.path.exists(trade_file): pd.DataFrame(columns=['요청ID','발신ID','발신자','수신ID','수신자','줄과목','받을과목','상태']).to_csv(trade_file, index=False)
-    
-    t1, t2 = st.tabs(["전체 현황판", "받은 제안"])
-    with t1:
-        peer_df = res_df[(res_df['학년'] == my_grade) & (res_df['학번'].astype(str) != my_id)] if '학년' in res_df.columns else res_df[res_df['학번'].astype(str) != my_id]
-        for _, row in peer_df.iterrows():
-            with st.container(border=True):
-                c1, c2, c3 = st.columns([2,5,3])
-                p_courses = [c.strip() for c in str(row.get('확정과목', '')).split(',') if c.strip()]
-                with c1: st.write(f"👤 {mask_name(row.get('이름', '알수없음'))}")
-                with c2: st.write(", ".join(p_courses))
-                with c3:
-                    with st.expander("교환 제안"):
-                        give = st.selectbox("줄 과목", my_courses, key=f"g_{row['학번']}")
-                        want = st.selectbox("받을 과목", p_courses, key=f"w_{row['학번']}")
-                        if st.button("제안", key=f"b_{row['학번']}"):
-                            req = {'요청ID': str(uuid.uuid4())[:8], '발신ID': my_id, '발신자': st.session_state.user_name, '수신ID': row['학번'], '수신자': row.get('이름', ''), '줄과목': give, '받을과목': want, '상태': '요청중'}
-                            pd.DataFrame([req]).to_csv(trade_file, mode='a', header=False, index=False, encoding='utf-8-sig')
-                            st.success("전송 완료!"); time.sleep(1); st.rerun()
-    with t2:
-        trade_df = pd.read_csv(trade_file)
-        my_inbox = trade_df[(trade_df['수신ID'].astype(str) == my_id) & (trade_df['상태'] == '요청중')]
-        if my_inbox.empty: st.info("제안이 없습니다.")
-        for _, req in my_inbox.iterrows():
-            with st.container(border=True):
-                st.write(f"🔔 **{mask_name(req['발신자'])}**님: 내 **[{req['받을과목']}]** ↔ 상대 **[{req['줄과목']}]**")
-                if st.button("✅ 수락(즉시반영)", key=f"a_{req['요청ID']}"):
-                    my_courses.remove(req['받을과목']); my_courses.append(req['줄과목'])
-                    res_df.at[my_info.index[0], '확정과목'] = ",".join(my_courses)
-                    s_idx = res_df.index[res_df['학번'].astype(str) == str(req['발신ID'])][0]
-                    s_courses = [c.strip() for c in str(res_df.at[s_idx, '확정과목']).split(',')]
-                    s_courses.remove(req['줄과목']); s_courses.append(req['받을과목'])
-                    res_df.at[s_idx, '확정과목'] = ",".join(s_courses)
-                    
-                    res_df.to_csv(result_file, index=False, encoding='utf-8-sig')
-                    trade_df.loc[trade_df['요청ID'] == req['요청ID'], '상태'] = '완료'
-                    trade_df.to_csv(trade_file, index=False, encoding='utf-8-sig')
-                    st.success("교환 성사!"); time.sleep(1); st.rerun()
-
